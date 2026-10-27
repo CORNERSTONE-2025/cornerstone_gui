@@ -1,0 +1,24 @@
+[project]
+name = "cornerstone-gui"
+version = "0.1.0"
+description = "Interactive GUI for the CORNERSTONE DB package (SHARP flare forecasting pipeline)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "streamlit>=1.40",
+    "plotly>=5.24",
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "h5py>=3.11",
+    "scikit-learn>=1.5",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["integration: runs the real CORNERSTONE package in its own virtualenv (slow)"]
+
+[tool.uv]
+package = false

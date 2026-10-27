@@ -1,0 +1,2 @@
+{"data_version": "clean", "window_hours": 24, "buffer_minutes": 6, "sampling_interval": 12,
+ "subsample": true, "subsample_size": 600, "random_seed": 42}

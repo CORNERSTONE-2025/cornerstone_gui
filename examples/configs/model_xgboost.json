@@ -1,0 +1,54 @@
+{
+ "model": "XGBOOST",
+ "model_params": {
+  "n_estimators": 100,
+  "max_depth": 3,
+  "learning_rate": 0.1
+ },
+ "training_config": {
+  "batch_size": 64,
+  "learning_rate": 0.0001,
+  "weight_decay": 0.0001,
+  "num_epochs": 100,
+  "patience": 20,
+  "n_folds": 5,
+  "lr_scheduler": {
+   "type": "CosineAnnealingLR",
+   "T_max": 100,
+   "eta_min": 1e-06
+  },
+  "threshold_optimization": {
+   "enabled": true,
+   "metric": "TSS",
+   "n_thresholds": 50,
+   "threshold_range": [
+    0.0,
+    1.0
+   ],
+   "min_recall": 0.6,
+   "min_precision": 0.3,
+   "optimize_every_epoch": true
+  },
+  "calibration": {
+   "enabled": false,
+   "type": "platt",
+   "few_pos_threshold": 25,
+   "n_bins": 10
+  },
+  "early_stopping": {
+   "monitor": "tss",
+   "mode": "max",
+   "min_delta": 0.001,
+   "patience": 20
+  },
+  "loss_function": {
+   "type": "bce"
+  }
+ },
+ "regularization_params": [
+  100.0,
+  1000.0,
+  10000.0
+ ],
+ "seed": 42
+}

@@ -1,0 +1,19 @@
+{
+ "windows": [
+  "3h",
+  "6h",
+  "12h",
+  "24h"
+ ],
+ "threshold_mode": "cv",
+ "model_choice": "best",
+ "source_file": "test",
+ "harp_filter": [],
+ "time_start": null,
+ "time_end": null,
+ "exclude_overlap": true,
+ "bootstrap": {
+  "n": 1000,
+  "cluster": true
+ }
+}

@@ -1,0 +1,9 @@
+{
+  "cornerstone_root": "/bigdisk/daniele/cornerstone_module",
+  "cornerstone_python": "",
+  "db_path": "",
+  "workspace": "workspace",
+  "demo_workspace": "workspace_demo",
+  "mode": "real",
+  "min_free_disk_gb": 5.0
+}
