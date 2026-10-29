@@ -7,9 +7,9 @@ from cs_gui import ui
 from cs_gui.pipeline import (CALIBRATION_TYPES, DEFAULT_TRAINING_CONFIG, LOSS_TYPES, MONITORS, SCHEDULERS,
                              THRESHOLD_METRICS, validate_model_config)
 
-c = ui.page_header("Configurazione dei modelli",
-                   "Algoritmi e iperparametri letti dal pacchetto (MODEL_CONFIGS, REGULARIZATION_PARAMS). "
-                   "Ogni configurazione salvata è un artefatto immutabile e versionabile.")
+c = ui.page_header("Model configuration",
+                   "Algorithms and hyperparameters read from the package (MODEL_CONFIGS, REGULARIZATION_PARAMS). "
+                   "Every saved configuration is an immutable, versionable artifact.")
 info = ui.package_info()
 if not info:
     st.stop()
@@ -19,36 +19,36 @@ KNOWN_CHOICES = {"pooling": ["mask_mean", "last"], "embed": ["fixed", "learned",
                  "freq": ["h", "t", "s", "d"], "task_name": ["classification"]}
 FIXED = {"model_name", "task_name", "num_class", "c_out"}   # identity of the architecture: not editable
 
-tab_new, tab_list = st.tabs(["Nuova configurazione", "Configurazioni salvate"])
+tab_new, tab_list = st.tabs(["New configuration", "Saved configurations"])
 
 with tab_new:
-    base_id = ui.artifact_picker("Parti da una configurazione esistente (duplica e modifica)", "model_config",
+    base_id = ui.artifact_picker("Start from an existing configuration (duplicate and edit)", "model_config",
                                  key="mc_base", allow_none=True)
     base = c.store.get(base_id)["config"] if base_id else None
     models = info["trainable_models"]
     gpu = set(info["gpu_only_models"])
-    model = st.selectbox("Algoritmo", models, index=models.index(base["model"]) if base else models.index("LSTM"),
+    model = st.selectbox("Algorithm", models, index=models.index(base["model"]) if base else models.index("LSTM"),
                          format_func=lambda m: f"{m}  ({'sklearn' if m in info['sk_models'] else 'PyTorch'})"
-                                               + ("  — richiede GPU" if m in gpu else ""), key=f"mc_model_{base_id}")
+                                               + ("  — requires GPU" if m in gpu else ""), key=f"mc_model_{base_id}")
     if model in gpu and not info["cuda_available"]:
-        st.warning(f"{model} usa cupy (GPU CUDA): la configurazione si può salvare ma il training non partirà su "
-                   "questa macchina.")
+        st.warning(f"{model} uses cupy (CUDA GPU): the configuration can be saved but training will not start on "
+                   "this machine.")
     is_sk = model in info["sk_models"]
     k = f"{base_id}_{model}"           # widget keys reset when base/model change
     defaults = info["model_configs"].get(model, {})
     current = {**defaults, **((base or {}).get("model_params", {}) if base and base["model"] == model else {})}
 
-    st.subheader("Iperparametri del modello")
+    st.subheader("Model hyperparameters")
     params = {}
     cols = st.columns(3)
     for i, (p, d) in enumerate(defaults.items()):
         v = current.get(p, d)
         col = cols[i % 3]
         if p in FIXED:
-            col.text_input(p, str(v), disabled=True, key=f"{k}_{p}", help="Fisso per questa architettura")
+            col.text_input(p, str(v), disabled=True, key=f"{k}_{p}", help="Fixed for this architecture")
         elif d is None:
-            col.text_input(p, "auto (dimensione del dataset)", disabled=True, key=f"{k}_{p}",
-                           help="Impostato dal pacchetto in base al numero di feature dello split")
+            col.text_input(p, "auto (dataset size)", disabled=True, key=f"{k}_{p}",
+                           help="Set by the package from the number of features of the split")
         elif isinstance(d, bool):
             params[p] = col.checkbox(p, bool(v), key=f"{k}_{p}")
         elif isinstance(d, int):
@@ -61,28 +61,28 @@ with tab_new:
         else:
             params[p] = col.text_input(p, str(v), key=f"{k}_{p}")
     if "seq_len" in defaults:
-        st.caption("seq_len viene sostituito dal pacchetto con la lunghezza della finestra temporale in training.")
+        st.caption("seq_len is replaced by the package with the length of the time window during training.")
     if not defaults:
-        st.caption("Nessun iperparametro esposto da MODEL_CONFIGS per questo modello.")
+        st.caption("No hyperparameter exposed by MODEL_CONFIGS for this model.")
 
     tc = copy.deepcopy((base or {}).get("training_config") or info.get("default_training_config") or DEFAULT_TRAINING_CONFIG)
     for kk, vv in DEFAULT_TRAINING_CONFIG.items():
         tc.setdefault(kk, copy.deepcopy(vv))
-    st.subheader("Training e validazione")
+    st.subheader("Training and validation")
     if is_sk:
-        st.caption(f"Per {model} (sklearn) il pacchetto usa: griglia di regolarizzazione C esplorata in CV, "
-                   "ottimizzazione della soglia su validation. Ottimizzatore, loss ed early stopping valgono solo per "
-                   "i modelli PyTorch.")
+        st.caption(f"For {model} (sklearn) the package uses: regularization grid C explored in CV, "
+                   "threshold optimization on validation. Optimizer, loss and early stopping only apply to "
+                   "PyTorch models.")
         reg_default = (base or {}).get("regularization_params") or info["regularization_params"].get(model, {}).get(
             "regularization_params", [])
-        reg_txt = st.text_input("Griglia di regolarizzazione (regularization_params, valori separati da virgola)",
+        reg_txt = st.text_input("Regularization grid (regularization_params, comma-separated values)",
                                 ", ".join(f"{x:g}" for x in reg_default), key=f"{k}_reg",
-                                help="XGBoost: reg_lambda · ROCKET/MINIROCKET: C del classificatore lineare")
+                                help="XGBoost: reg_lambda · ROCKET/MINIROCKET: C of the linear classifier")
         try:
             reg = [float(x) for x in reg_txt.split(",") if x.strip()]
         except ValueError:
             reg = []
-            st.error("Griglia non valida: usa numeri separati da virgola")
+            st.error("Invalid grid: use comma-separated numbers")
     else:
         reg = None
         a, b, d = st.columns(3)
@@ -91,7 +91,7 @@ with tab_new:
         tc["weight_decay"] = float(d.number_input("weight_decay", 0.0, 10.0, float(tc["weight_decay"]), format="%.2e", key=f"{k}_wd"))
         tc["num_epochs"] = int(a.number_input("num_epochs", 1, 10000, int(tc["num_epochs"]), key=f"{k}_ep"))
         tc["patience"] = int(b.number_input("patience", 1, 10000, int(tc["patience"]), key=f"{k}_pat"))
-        with st.expander("Scheduler del learning rate"):
+        with st.expander("Learning rate scheduler"):
             stype = st.selectbox("lr_scheduler.type", SCHEDULERS,
                                  index=SCHEDULERS.index((tc.get("lr_scheduler") or {}).get("type")), key=f"{k}_sch")
             if stype == "CosineAnnealingLR":
@@ -105,11 +105,11 @@ with tab_new:
                                       "min_lr": float(st.number_input("min_lr", 0.0, 1.0, 1e-6, format="%.1e", key=f"{k}_rml"))}
             else:
                 tc["lr_scheduler"] = None
-        with st.expander("Loss e sbilanciamento delle classi"):
+        with st.expander("Loss and class imbalance"):
             lf = dict(tc.get("loss_function") or {"type": "bce"})
             lf["type"] = st.selectbox("loss_function.type", LOSS_TYPES, index=LOSS_TYPES.index(lf.get("type", "bce")),
-                                      key=f"{k}_loss", help="bce usa pos_weight = n_neg/n_pos calcolato dal pacchetto; "
-                                                            "focal/asymmetric_focal riducono il peso degli esempi facili.")
+                                      key=f"{k}_loss", help="bce uses pos_weight = n_neg/n_pos computed by the package; "
+                                                            "focal/asymmetric_focal down-weight easy examples.")
             if lf["type"] in ("focal", "asymmetric_focal", "curriculum"):
                 sub = dict(lf.get(lf["type"]) or {})
                 for pk, pv in {"focal": {"alpha": 0.96, "gamma": 2.0}, "asymmetric_focal": {"alpha": 0.96, "gamma_pos": 5.0, "gamma_neg": 2.0},
@@ -128,21 +128,21 @@ with tab_new:
             es["min_delta"] = float(st.number_input("min_delta", 0.0, 1.0, float(es.get("min_delta", 1e-3)), format="%.1e", key=f"{k}_esd"))
             es["patience"] = int(st.number_input("patience (early stopping)", 1, 10000, int(es.get("patience", tc["patience"])), key=f"{k}_esp"))
             tc["early_stopping"] = es
-        with st.expander("Calibrazione delle probabilità"):
+        with st.expander("Probability calibration"):
             cal = dict(tc.get("calibration") or {})
-            cal["enabled"] = st.checkbox("Calibrazione post-hoc sulla validation", bool(cal.get("enabled")), key=f"{k}_cal")
+            cal["enabled"] = st.checkbox("Post-hoc calibration on validation", bool(cal.get("enabled")), key=f"{k}_cal")
             ctype = cal.get("type") or cal.get("kind") or "platt"
             cal["type"] = st.selectbox("calibration.type", CALIBRATION_TYPES, index=CALIBRATION_TYPES.index(ctype)
                                        if ctype in CALIBRATION_TYPES else 0, key=f"{k}_calt",
-                                       help="Il pacchetto legge la chiave 'type' (la chiave 'kind' viene ignorata).")
+                                       help="The package reads the 'type' key (the 'kind' key is ignored).")
             cal.pop("kind", None)
-            st.caption("Attenzione: con modelli poco addestrati il pacchetto può interrompersi sul controllo di "
-                       "invarianza dell'AUC dopo la calibrazione Platt.")
+            st.caption("Warning: with barely trained models the package can stop on the AUC invariance "
+                       "check after Platt calibration.")
             tc["calibration"] = cal
-    with st.expander("Ottimizzazione della soglia decisionale (su validation)"):
+    with st.expander("Decision threshold optimization (on validation)"):
         th = dict(tc.get("threshold_optimization") or {})
-        th["enabled"] = st.checkbox("Abilitata", bool(th.get("enabled", True)), key=f"{k}_th")
-        th["metric"] = st.selectbox("Metrica da massimizzare", THRESHOLD_METRICS,
+        th["enabled"] = st.checkbox("Enabled", bool(th.get("enabled", True)), key=f"{k}_th")
+        th["metric"] = st.selectbox("Metric to maximize", THRESHOLD_METRICS,
                                     index=THRESHOLD_METRICS.index(th.get("metric", "TSS")), key=f"{k}_thm")
         th["n_thresholds"] = int(st.number_input("n_thresholds", 2, 10000, int(th.get("n_thresholds", 50)), key=f"{k}_thn"))
         if th["metric"] == "precision_at_recall":
@@ -152,29 +152,29 @@ with tab_new:
         th.setdefault("threshold_range", [0.0, 1.0])
         tc["threshold_optimization"] = th
     seed = int(st.number_input("Random seed (python, numpy, torch)", 0, 2**32 - 1, int((base or {}).get("seed", 42)), key=f"{k}_seed"))
-    st.caption("Il numero di fold e le finestre temporali si scelgono al momento del training (dipendono dallo split).")
+    st.caption("The number of folds and the time windows are chosen at training time (they depend on the split).")
 
     cfg = {"model": model, "model_params": params, "training_config": tc, "regularization_params": reg, "seed": seed}
-    name = st.text_input("Nome", f"{model} " + ("(variante)" if base else "base"), key=f"{k}_name")
-    desc = st.text_area("Descrizione", "", key=f"{k}_desc", height=70)
+    name = st.text_input("Name", f"{model} " + ("(variant)" if base else "base"), key=f"{k}_name")
+    desc = st.text_area("Description", "", key=f"{k}_desc", height=70)
     changed = {p: v for p, v in params.items() if defaults.get(p) != v}
-    ui.config_summary("modello", {"model": model, "seed": seed, **({"regularization_params": reg} if is_sk else {})},
-                      {"iperparametri modificati rispetto al pacchetto": changed or "nessuno"})
-    with st.expander("Configurazione completa (JSON)"):
+    ui.config_summary("model", {"model": model, "seed": seed, **({"regularization_params": reg} if is_sk else {})},
+                      {"hyperparameters changed from the package defaults": changed or "none"})
+    with st.expander("Full configuration (JSON)"):
         st.json(cfg)
-    if ui.show_errors(validate_model_config(cfg, info)) and st.button("Salva configurazione", type="primary"):
+    if ui.show_errors(validate_model_config(cfg, info)) and st.button("Save configuration", type="primary"):
         m = ui.create_and_launch(lambda: c.pipeline.create_model_config(name, cfg, desc,
                                                                         derived_from=base_id), launch=False)
         if m:
-            st.success(f"Configurazione salvata: {m['id']}")
+            st.success(f"Configuration saved: {m['id']}")
 
 with tab_list:
-    sel = ui.artifact_list("model_config", lambda m: {"modello": m["config"]["model"], "seed": m["config"].get("seed"),
-                                                      "derivata da": m.get("derived_from") or ""}, key="mcl")
+    sel = ui.artifact_list("model_config", lambda m: {"model": m["config"]["model"], "seed": m["config"].get("seed"),
+                                                      "derived from": m.get("derived_from") or ""}, key="mcl")
     if sel:
         m = c.store.get(sel)
         st.json(m["config"])
-        ui.download_json("Esporta configurazione (JSON)", m["config"], f"{sel}.json", key="mc_dl")
-        other = ui.artifact_picker("Confronta con", "model_config", key="mc_diff", allow_none=True)
+        ui.download_json("Export configuration (JSON)", m["config"], f"{sel}.json", key="mc_dl")
+        other = ui.artifact_picker("Compare with", "model_config", key="mc_diff", allow_none=True)
         if other and other != sel:
             st.dataframe(c.pipeline.diff(sel, other), hide_index=True, width="stretch")

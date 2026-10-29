@@ -16,10 +16,10 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from cs_gui.settings import Settings  # noqa: E402
+from cs_gui.settings import DEFAULT_CORNERSTONE_ROOT, Settings  # noqa: E402
 from cs_gui.store import ArtifactStore  # noqa: E402
 
-CORNERSTONE_ROOT = os.environ.get("CS_GUI_CORNERSTONE_ROOT", "/bigdisk/daniele/cornerstone_module")
+CORNERSTONE_ROOT = os.environ.get("CS_GUI_CORNERSTONE_ROOT", DEFAULT_CORNERSTONE_ROOT)
 
 
 def cornerstone_available() -> bool:

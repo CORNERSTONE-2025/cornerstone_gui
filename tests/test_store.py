@@ -11,9 +11,9 @@ def test_create_and_get(store):
 
 
 def test_missing_parent_role_and_unknown_parent(store):
-    with pytest.raises(StoreError, match="Dipendenze mancanti"):
+    with pytest.raises(StoreError, match="Missing dependencies"):
         store.create("dataset", "D", {})
-    with pytest.raises(StoreError, match="non trovato"):
+    with pytest.raises(StoreError, match="not found"):
         store.create("dataset", "D", {}, parents={"labels": "lbl-nope"})
 
 
@@ -39,7 +39,7 @@ def test_outputs_hash_and_integrity(store):
     f.write_text("hellO")                                  # same size, different content
     assert any("Checksum" in p for p in store.verify(m["id"]))
     f.unlink()
-    assert any("mancante" in p for p in store.verify(m["id"]))
+    assert any("Missing file" in p for p in store.verify(m["id"]))
 
 
 def test_lineage_and_protected_delete(store):
@@ -48,9 +48,9 @@ def test_lineage_and_protected_delete(store):
     c = store.create("split", "S", {}, parents={"dataset": b["id"]})
     assert store.ancestors(c["id"]) == [a["id"], b["id"]]
     assert set(store.descendants(a["id"])) == {b["id"], c["id"]}
-    with pytest.raises(StoreError, match="non confermata"):
+    with pytest.raises(StoreError, match="not confirmed"):
         store.delete(a["id"])
-    with pytest.raises(StoreError, match="dipendono"):
+    with pytest.raises(StoreError, match="depend on"):
         store.delete(a["id"], confirm=True)
     gone = store.delete(a["id"], confirm=True, cascade=True)
     assert set(gone) == {a["id"], b["id"], c["id"]} and store.list() == []
@@ -59,7 +59,7 @@ def test_lineage_and_protected_delete(store):
 def test_running_artifact_cannot_be_deleted(store):
     a = store.create("labels", "L", {})
     store.set_status(a["id"], "running")
-    with pytest.raises(StoreError, match="esecuzione"):
+    with pytest.raises(StoreError, match="running"):
         store.delete(a["id"], confirm=True)
 
 

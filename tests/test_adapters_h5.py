@@ -55,7 +55,7 @@ def test_labeling_db_reproduces_harp_bounds(main_db, tmp_path):
 def test_snapshot_label_table(main_db, tmp_path):
     out = tmp_path / "snap.sqlite"
     assert adapters.snapshot_label_table(str(main_db), str(out), "DF_DEF_Cplus_delta24_three_classes") == 1
-    with pytest.raises(RuntimeError, match="non presente"):
+    with pytest.raises(RuntimeError, match="not found in the database"):
         adapters.snapshot_label_table(str(main_db), str(tmp_path / "x.sqlite"), "DF_NOPE")
 
 

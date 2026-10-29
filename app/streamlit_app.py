@@ -14,32 +14,32 @@ st.set_page_config(page_title="CORNERSTONE GUI", page_icon="☀️", layout="wid
 
 P = ROOT / "app" / "pages"
 pages = {
-    "Progetto": [
-        st.Page(P / "home.py", title="Home e stato", icon="🏠", default=True),
+    "Project": [
+        st.Page(P / "home.py", title="Home and status", icon="🏠", default=True),
     ],
     "Pipeline": [
         st.Page(P / "labeling.py", title="Labeling", icon="🏷️"),
         st.Page(P / "dataset.py", title="Dataset", icon="🗂️"),
-        st.Page(P / "models.py", title="Configurazione modelli", icon="⚙️"),
-        st.Page(P / "training.py", title="Training e validazione", icon="🏋️"),
-        st.Page(P / "inference.py", title="Inferenza", icon="🔮"),
+        st.Page(P / "models.py", title="Model configuration", icon="⚙️"),
+        st.Page(P / "training.py", title="Training and validation", icon="🏋️"),
+        st.Page(P / "inference.py", title="Inference", icon="🔮"),
     ],
-    "Analisi": [
+    "Analysis": [
         st.Page(P / "active_regions.py", title="Active Regions", icon="🌞"),
-        st.Page(P / "metrics.py", title="Metriche globali", icon="📊"),
-        st.Page(P / "compare.py", title="Confronto algoritmi", icon="⚖️"),
+        st.Page(P / "metrics.py", title="Global metrics", icon="📊"),
+        st.Page(P / "compare.py", title="Algorithm comparison", icon="⚖️"),
     ],
-    "Riproducibilità": [
-        st.Page(P / "experiments.py", title="Esperimenti e pipeline", icon="🧬"),
+    "Reproducibility": [
+        st.Page(P / "experiments.py", title="Experiments and pipeline", icon="🧬"),
     ],
 }
 
 with st.sidebar:
     c = ui.ctx()
-    mode = "DEMO (sintetico)" if c.settings.mode == "demo" else "Reale"
-    st.markdown(f"**Modalità:** {mode}  \n**Workspace:** `{c.settings.active_workspace.name}`")
+    mode = "DEMO (synthetic)" if c.settings.mode == "demo" else "Real"
+    st.markdown(f"**Mode:** {mode}  \n**Workspace:** `{c.settings.active_workspace.name}`")
     active = [m for m in c.store.list() if m["status"] in ("pending", "running")]
-    st.markdown(f"**Job attivi:** {len(active)}")
+    st.markdown(f"**Active jobs:** {len(active)}")
     for m in active[:5]:
         st.caption(f"{ui.badge(m['status'])} {m['type']} · {m['name']}")
 

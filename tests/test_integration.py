@@ -9,7 +9,7 @@ import time
 import pandas as pd
 import pytest
 
-from conftest import cornerstone_available, dump, run_and_wait
+from conftest import CORNERSTONE_ROOT, cornerstone_available, dump, run_and_wait
 from cs_gui.demo import build_demo_db
 from cs_gui.jobs import JobManager
 from cs_gui.pipeline import DEFAULT_TRAINING_CONFIG, Pipeline, default_split_config
@@ -23,7 +23,7 @@ pytestmark = [pytest.mark.integration,
 @pytest.fixture(scope="session")
 def demo(tmp_path_factory):
     ws = tmp_path_factory.mktemp("demo_ws")
-    s = Settings(cornerstone_root=os.environ.get("CS_GUI_CORNERSTONE_ROOT", "/bigdisk/daniele/cornerstone_module"),
+    s = Settings(cornerstone_root=CORNERSTONE_ROOT,
                  demo_workspace=str(ws), mode="demo", min_free_disk_gb=0.1)
     build_demo_db(s.demo_db_path, n_harps=30, seed=3)
     store = ArtifactStore(s.active_workspace)

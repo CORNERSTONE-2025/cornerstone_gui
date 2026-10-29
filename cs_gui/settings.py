@@ -2,8 +2,11 @@
 
 Settings are read from (in order of precedence):
 1. environment variables ``CS_GUI_*``;
-2. ``gui_settings.json`` in the project root (not versioned, see ``config/gui_settings.example.json``);
-3. defaults derived from the CORNERSTONE checkout (``cornerstone/configs/db_config.json``).
+2. ``gui_settings.json`` in the project root, or the file named by ``CS_GUI_SETTINGS_FILE``
+   (not versioned, see ``config/gui_settings.example.json``);
+3. defaults: the ``cornerstone`` package importable by this interpreter, otherwise a sibling
+   checkout ``../cornerstone_db_package``; its ``.venv`` if present; the database named in
+   ``cornerstone/configs/db_config.json``.
 
 Two modes exist and are kept strictly separated:
 - ``real``: the real SQLite database of the package, workspace ``workspace/``;
@@ -12,20 +15,31 @@ Two modes exist and are kept strictly separated:
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
+import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-SETTINGS_FILE = PROJECT_ROOT / "gui_settings.json"
-DEFAULT_CORNERSTONE_ROOT = "/bigdisk/daniele/cornerstone_module"
+SETTINGS_FILE = Path(os.environ.get("CS_GUI_SETTINGS_FILE") or PROJECT_ROOT / "gui_settings.json")
+
+
+def _default_cornerstone_root() -> str:
+    spec = importlib.util.find_spec("cornerstone")
+    if spec and spec.origin:
+        return str(Path(spec.origin).resolve().parent.parent)
+    return str(PROJECT_ROOT.parent / "cornerstone_db_package")
+
+
+DEFAULT_CORNERSTONE_ROOT = _default_cornerstone_root()
 
 
 @dataclass
 class Settings:
     cornerstone_root: str = DEFAULT_CORNERSTONE_ROOT
-    cornerstone_python: str = ""          # default: <cornerstone_root>/.venv/bin/python
+    cornerstone_python: str = ""          # default: <cornerstone_root>/.venv/bin/python, else this interpreter
     db_path: str = ""                      # default: local_db_path in db_config.json
     workspace: str = str(PROJECT_ROOT / "workspace")
     demo_workspace: str = str(PROJECT_ROOT / "workspace_demo")
@@ -36,7 +50,10 @@ class Settings:
     # ------------------------------------------------------------------ derived values
     @property
     def python(self) -> str:
-        return self.cornerstone_python or str(Path(self.cornerstone_root) / ".venv" / "bin" / "python")
+        if self.cornerstone_python:
+            return self.cornerstone_python
+        venv = Path(self.cornerstone_root) / ".venv" / "bin" / "python"
+        return str(venv) if venv.exists() else sys.executable
 
     @property
     def active_workspace(self) -> Path:
@@ -59,13 +76,13 @@ class Settings:
         out = []
         root = Path(self.cornerstone_root)
         if not (root / "cornerstone" / "__init__.py").exists():
-            out.append(f"Pacchetto CORNERSTONE non trovato in '{root}' (manca cornerstone/__init__.py).")
+            out.append(f"CORNERSTONE package not found in '{root}' (cornerstone/__init__.py is missing).")
         if not Path(self.python).exists():
-            out.append(f"Interprete Python di CORNERSTONE non trovato: '{self.python}'.")
+            out.append(f"CORNERSTONE Python interpreter not found: '{self.python}'.")
         db = self.active_db_path
         if not db or not Path(db).exists():
-            hint = " Genera il DB demo dalla Home." if self.mode == "demo" else ""
-            out.append(f"Database SQLite non trovato: '{db}'.{hint}")
+            hint = " Generate the demo DB from the Home page." if self.mode == "demo" else ""
+            out.append(f"SQLite database not found: '{db}'.{hint}")
         return out
 
 
@@ -98,7 +115,7 @@ def load_settings(path: Path | None = None) -> Settings:
     known = {k: v for k, v in data.items() if k in Settings.__dataclass_fields__}
     s = Settings(**known)
     if s.mode not in ("real", "demo"):
-        raise ValueError(f"Modalità non valida: {s.mode!r} (attese 'real' o 'demo')")
+        raise ValueError(f"Invalid mode: {s.mode!r} (expected 'real' or 'demo')")
     return s
 
 

@@ -6,3 +6,7 @@ __pycache__/
 gui_settings.json
 workspace/
 workspace_demo/
+
+# Docker: local database folder and compose overrides
+data/
+.env

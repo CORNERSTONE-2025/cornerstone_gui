@@ -29,11 +29,11 @@ from typing import Iterable
 # artifact type -> (id prefix, human readable name)
 ARTIFACT_TYPES = {
     "labels": ("lbl", "Label (labeling)"),
-    "dataset": ("ds", "Dataset HDF5 (estrazione)"),
-    "split": ("spl", "Dataset filtrato e suddiviso"),
-    "model_config": ("mdl", "Configurazione modello"),
+    "dataset": ("ds", "HDF5 dataset (extraction)"),
+    "split": ("spl", "Filtered and split dataset"),
+    "model_config": ("mdl", "Model configuration"),
     "training": ("trn", "Training"),
-    "inference": ("inf", "Inferenza"),
+    "inference": ("inf", "Inference"),
 }
 # step artifact type -> required parent roles
 PARENT_ROLES = {
@@ -105,18 +105,18 @@ class ArtifactStore:
         mode: str = "real",
     ) -> dict:
         if artifact_type not in ARTIFACT_TYPES:
-            raise StoreError(f"Tipo di artefatto sconosciuto: {artifact_type}")
+            raise StoreError(f"Unknown artifact type: {artifact_type}")
         if status not in EDITABLE + (FINAL_OK,):
-            raise StoreError(f"Stato iniziale non valido: {status}")
+            raise StoreError(f"Invalid initial status: {status}")
         parents = parents or {}
         missing = [r for r in PARENT_ROLES[artifact_type] if r not in parents]
         if missing:
-            raise StoreError(f"Dipendenze mancanti per '{artifact_type}': {missing}")
+            raise StoreError(f"Missing dependencies for '{artifact_type}': {missing}")
         for role, pid in parents.items():
             if not self.exists(pid):
-                raise StoreError(f"Artefatto genitore '{pid}' ({role}) non trovato")
+                raise StoreError(f"Parent artifact '{pid}' ({role}) not found")
         if not name.strip():
-            raise StoreError("Il nome dell'artefatto è obbligatorio")
+            raise StoreError("The artifact name is required")
 
         aid = self.new_id(artifact_type)
         d = self.path(aid)
@@ -149,11 +149,11 @@ class ArtifactStore:
     def get(self, artifact_id: str) -> dict:
         p = self.manifest_path(artifact_id)
         if not p.exists():
-            raise StoreError(f"Artefatto '{artifact_id}' non trovato")
+            raise StoreError(f"Artifact '{artifact_id}' not found")
         try:
             return json.loads(p.read_text())
         except json.JSONDecodeError as e:
-            raise StoreError(f"Manifest corrotto per '{artifact_id}': {e}") from e
+            raise StoreError(f"Corrupted manifest for '{artifact_id}': {e}") from e
 
     def list(self, artifact_type: str | None = None, status: str | None = None) -> list[dict]:
         out = []
@@ -179,12 +179,12 @@ class ArtifactStore:
         frozen = m["status"] not in EDITABLE
         for key in ("config", "parents", "type", "id", "created_at"):
             if key in fields and (frozen or key in ("type", "id", "created_at")):
-                raise StoreError(f"'{key}' non modificabile per l'artefatto {artifact_id} (stato {m['status']})")
+                raise StoreError(f"'{key}' cannot be changed for artifact {artifact_id} (status {m['status']})")
         new_status = fields.get("status")
         if new_status and new_status not in STATUSES:
-            raise StoreError(f"Stato non valido: {new_status}")
+            raise StoreError(f"Invalid status: {new_status}")
         if m["status"] == FINAL_OK and new_status and new_status != FINAL_OK:
-            raise StoreError(f"L'artefatto {artifact_id} è completato: non può cambiare stato")
+            raise StoreError(f"Artifact {artifact_id} is completed: its status cannot change")
         m.update(fields)
         m["updated_at"] = now_iso()
         if new_status:
@@ -255,20 +255,20 @@ class ArtifactStore:
             return [str(e)]
         for role, pid in (m.get("parents") or {}).items():
             if not self.exists(pid):
-                problems.append(f"Dipendenza mancante: {role} → {pid}")
+                problems.append(f"Missing dependency: {role} → {pid}")
             elif self.get(pid).get("status") != FINAL_OK:
-                problems.append(f"Dipendenza non completata: {role} → {pid} ({self.get(pid).get('status')})")
+                problems.append(f"Dependency not completed: {role} → {pid} ({self.get(pid).get('status')})")
         if m.get("status") == FINAL_OK:
             d = self.path(artifact_id)
             for rel, info in (m.get("outputs") or {}).get("files", {}).items():
                 p = d / rel
                 if not p.exists():
-                    problems.append(f"File mancante: {rel}")
+                    problems.append(f"Missing file: {rel}")
                     continue
                 if p.stat().st_size != info.get("size"):
                     problems.append(f"Dimensione cambiata: {rel}")
                 elif full_hash and info.get("sha256") and sha256_file(p) != info["sha256"]:
-                    problems.append(f"Checksum diverso (file modificato o corrotto): {rel}")
+                    problems.append(f"Checksum mismatch (file modified or corrupted): {rel}")
         return problems
 
     def size_bytes(self, artifact_id: str) -> int:
@@ -278,19 +278,19 @@ class ArtifactStore:
     def delete(self, artifact_id: str, confirm: bool = False, cascade: bool = False) -> list[str]:
         """Delete an artifact. Refuses if dependents exist unless ``cascade``; always needs ``confirm``."""
         if not confirm:
-            raise StoreError("Cancellazione non confermata")
+            raise StoreError("Deletion not confirmed")
         m = self.get(artifact_id)
         if m.get("status") == "running":
-            raise StoreError("Impossibile cancellare un artefatto in esecuzione: annulla prima il job")
+            raise StoreError("Cannot delete a running artifact: cancel the job first")
         victims = [artifact_id]
         desc = self.descendants(artifact_id)
         if desc and not cascade:
-            raise StoreError(f"Altri artefatti dipendono da {artifact_id}: {desc}. "
-                             "Cancellali prima o usa la cancellazione a cascata.")
+            raise StoreError(f"Other artifacts depend on {artifact_id}: {desc}. "
+                             "Delete them first or use cascade deletion.")
         victims += desc
         for aid in reversed(victims):
             if self.exists(aid) and self.get(aid).get("status") == "running":
-                raise StoreError(f"{aid} è in esecuzione: annulla prima il job")
+                raise StoreError(f"{aid} is running: cancel the job first")
         for aid in reversed(victims):
             shutil.rmtree(self.path(aid), ignore_errors=False)
         return victims

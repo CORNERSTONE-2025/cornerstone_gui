@@ -44,7 +44,7 @@ def _on_sigterm(signum, frame):
     store, aid = _current.get("store"), _current.get("aid")
     if store and aid:
         try:
-            store.set_status(aid, "cancelled", finished_at=now_iso(), error="Annullato dall'utente (SIGTERM)")
+            store.set_status(aid, "cancelled", finished_at=now_iso(), error="Cancelled by the user (SIGTERM)")
         except Exception:
             pass
     os._exit(143)
@@ -60,17 +60,17 @@ def run_artifacts(workspace: str, db: str, mode: str, job_id: str, ids: list[str
     for aid in ids:
         m = store.get(aid)
         if m["status"] == "completed":
-            print(f"[cs-gui] {aid} già completato: salto (ripresa catena)", flush=True)
+            print(f"[cs-gui] {aid} already completed: skipped (chain resume)", flush=True)
             continue
-        bad = [f"{r}={p} ({store.get(p)['status'] if store.exists(p) else 'mancante'})"
+        bad = [f"{r}={p} ({store.get(p)['status'] if store.exists(p) else 'missing'})"
                for r, p in m["parents"].items() if not store.exists(p) or store.get(p)["status"] != "completed"]
         if bad:
             store.set_status(aid, "failed", finished_at=now_iso(),
-                             error="Dipendenze non completate: " + ", ".join(bad))
+                             error="Dependencies not completed: " + ", ".join(bad))
             return 2
         if m["mode"] != mode:
             store.set_status(aid, "failed", finished_at=now_iso(),
-                             error=f"Artefatto in modalità '{m['mode']}' eseguito in modalità '{mode}'")
+                             error=f"Artifact in '{m['mode']}' mode run in '{mode}' mode")
             return 2
         _current["aid"] = aid
         t0 = time.time()
@@ -165,7 +165,7 @@ def main(argv=None) -> int:
         introspect(a.introspect, root)
         return 0
     if not (a.workspace and a.db and a.ids):
-        ap.error("--workspace, --db e almeno un artefatto sono obbligatori")
+        ap.error("--workspace, --db and at least one artifact are required")
     return run_artifacts(a.workspace, a.db, a.mode, a.job, a.ids, root)
 
 

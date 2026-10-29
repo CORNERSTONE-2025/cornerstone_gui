@@ -13,9 +13,9 @@ from .pipeline import Pipeline
 from .settings import Settings, load_settings
 from .store import ARTIFACT_TYPES, ArtifactStore, StoreError
 
-STATUS_STYLE = {"completed": ("green", "completato"), "failed": ("red", "fallito"), "running": ("blue", "in esecuzione"),
-                "pending": ("gray", "in coda"), "cancelled": ("orange", "annullato"), "draft": ("gray", "bozza"),
-                "corrupted": ("red", "manifest corrotto")}
+STATUS_STYLE = {"completed": ("green", "completed"), "failed": ("red", "failed"), "running": ("blue", "running"),
+                "pending": ("gray", "queued"), "cancelled": ("orange", "cancelled"), "draft": ("gray", "draft"),
+                "corrupted": ("red", "corrupted manifest")}
 
 
 # --------------------------------------------------------------------------- context
@@ -47,7 +47,7 @@ def package_info(refresh: bool = False) -> dict | None:
             return c.pipeline.package_info_refresh()
         return c.pipeline.info
     except Exception as e:  # noqa: BLE001
-        st.error(f"Impossibile leggere le funzionalità del pacchetto CORNERSTONE: {e}")
+        st.error(f"Cannot read the features of the CORNERSTONE package: {e}")
         return None
 
 
@@ -55,14 +55,14 @@ def package_info(refresh: bool = False) -> dict | None:
 def page_header(title: str, help_text: str = "") -> Ctx:
     c = ctx()
     if c.settings.mode == "demo":
-        st.warning("**MODALITÀ DEMO** — database sintetico generato per prova: i risultati NON hanno valore "
-                   "scientifico. Gli artefatti demo sono in un workspace separato.", icon="🧪")
+        st.warning("**DEMO MODE** — synthetic database generated for testing: the results have NO scientific "
+                   "value. Demo artifacts live in a separate workspace.", icon="🧪")
     st.title(title)
     if help_text:
         st.caption(help_text)
     problems = c.settings.problems()
     if problems:
-        st.error("Configurazione incompleta:\n\n- " + "\n- ".join(problems) + "\n\nVai alla **Home** per sistemarla.")
+        st.error("Incomplete configuration:\n\n- " + "\n- ".join(problems) + "\n\nGo to the **Home** page to fix it.")
     return c
 
 
@@ -82,27 +82,27 @@ def artifact_picker(label: str, types, key: str, completed_only: bool = True, he
     items = [m for t in types for m in c.store.list(t) if (m["status"] == "completed" or not completed_only)]
     if not items:
         names = ", ".join(ARTIFACT_TYPES[t][1] for t in types)
-        st.info(f"Nessun artefatto disponibile per: {names}. Crealo nella pagina corrispondente.")
+        st.info(f"No artifact available for: {names}. Create one in the corresponding page.")
         return None
     ids = [m["id"] for m in items]
     opts = ([None] if allow_none else []) + ids
     idx = opts.index(default) if default in opts else 0
     by = {m["id"]: m for m in items}
     return st.selectbox(label, opts, index=idx, key=key, help=help,
-                        format_func=lambda a: "— nessuno —" if a is None else label_of(by[a]))
+                        format_func=lambda a: "— none —" if a is None else label_of(by[a]))
 
 
 def show_errors(errs: list[str]) -> bool:
     if errs:
-        st.error("Correggi i parametri prima di procedere:\n\n- " + "\n- ".join(errs))
+        st.error("Fix the parameters before proceeding:\n\n- " + "\n- ".join(errs))
         return False
     return True
 
 
 def config_summary(title: str, cfg: dict, extra: dict | None = None) -> None:
     with st.container(border=True):
-        st.markdown(f"**Riepilogo — {title}**")
-        rows = [{"parametro": k, "valore": json.dumps(v) if isinstance(v, (list, dict)) else str(v)}
+        st.markdown(f"**Summary — {title}**")
+        rows = [{"parameter": k, "value": json.dumps(v) if isinstance(v, (list, dict)) else str(v)}
                 for k, v in {**(extra or {}), **cfg}.items()]
         st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
 
@@ -121,9 +121,9 @@ def create_and_launch(create_fn, launch: bool = True) -> dict | None:
     if launch:
         try:
             c.jobs.launch([m["id"]])
-            st.success(f"Avviato **{m['id']}** in background. Puoi cambiare pagina: il job continua.")
+            st.success(f"Started **{m['id']}** in the background. You can switch page: the job keeps running.")
         except StoreError as e:
-            st.error(f"Artefatto {m['id']} creato ma non avviato:\n\n{e}")
+            st.error(f"Artifact {m['id']} created but not started:\n\n{e}")
     st.session_state["last_created"] = m["id"]
     return m
 
@@ -131,7 +131,7 @@ def create_and_launch(create_fn, launch: bool = True) -> dict | None:
 def launch_existing(ids: list[str]) -> None:
     try:
         ctx().jobs.launch(ids)
-        st.success(f"Job avviato per: {', '.join(ids)}")
+        st.success(f"Job started for: {', '.join(ids)}")
     except StoreError as e:
         st.error(str(e))
 
@@ -152,7 +152,7 @@ def _elapsed(m: dict) -> str:
 
 def tail(path: Path, n: int = 60) -> str:
     if not path.exists():
-        return "(nessun log ancora)"
+        return "(no log yet)"
     with open(path, "rb") as f:
         f.seek(0, 2)
         size = f.tell()
@@ -169,30 +169,30 @@ def job_monitor(types: list[str] | None = None) -> None:
     active = [m for m in c.store.list() if m["status"] in ("pending", "running")
               and (types is None or m["type"] in types)]
     if not active:
-        st.caption("Nessun job in esecuzione per questa sezione.")
+        st.caption("No job running for this section.")
         return
     for m in active:
         with st.container(border=True):
             cols = st.columns([4, 2, 1])
             cols[0].markdown(f"**{m['name']}** · `{m['id']}` · {badge(m['status'])} · ⏱ {_elapsed(m)}")
             job_id = (m.get("run") or {}).get("job_id")
-            if job_id and cols[2].button("Annulla", key=f"cancel_{m['id']}"):
+            if job_id and cols[2].button("Cancel", key=f"cancel_{m['id']}"):
                 c.jobs.cancel(job_id)
                 st.rerun()
-            with st.expander("Log in tempo reale", expanded=m["status"] == "running"):
+            with st.expander("Live log", expanded=m["status"] == "running"):
                 st.code(tail(c.store.log_path(m["id"]), 25), language="text")
 
 
 def artifact_status_box(m: dict) -> None:
     run = m.get("run") or {}
-    st.markdown(f"{badge(m['status'])} · creato {m['created_at'][:19]} · durata {_elapsed(m) or '—'}")
+    st.markdown(f"{badge(m['status'])} · created {m['created_at'][:19]} · duration {_elapsed(m) or '—'}")
     if m["status"] == "failed":
-        st.error(f"**Errore:** {run.get('error')}")
+        st.error(f"**Error:** {run.get('error')}")
         if run.get("traceback"):
             with st.expander("Traceback"):
                 st.code(run["traceback"], language="text")
     if m["status"] == "cancelled":
-        st.warning(run.get("error") or "Annullato")
+        st.warning(run.get("error") or "Cancelled")
 
 
 def log_viewer(aid: str, lines: int = 300) -> None:
@@ -205,12 +205,12 @@ def artifact_list(types, columns_fn=None, key: str = "list") -> str | None:
     types = [types] if isinstance(types, str) else types
     items = [m for t in types for m in c.store.list(t)]
     if not items:
-        st.caption("Nessun artefatto.")
+        st.caption("No artifacts.")
         return None
     rows = []
     for m in items:
-        r = {"id": m["id"], "nome": m["name"], "stato": STATUS_STYLE.get(m["status"], ("", m["status"]))[1],
-             "creato": m["created_at"][:19].replace("T", " ")}
+        r = {"id": m["id"], "name": m["name"], "status": STATUS_STYLE.get(m["status"], ("", m["status"]))[1],
+             "created": m["created_at"][:19].replace("T", " ")}
         if columns_fn:
             try:
                 r.update(columns_fn(m))
@@ -224,7 +224,7 @@ def artifact_list(types, columns_fn=None, key: str = "list") -> str | None:
     ids = df["id"].tolist()
     picked = df.iloc[sel[0]]["id"] if sel else None
     by = {m["id"]: m for m in items}
-    return st.selectbox("Apri il dettaglio (o seleziona una riga della tabella)", [None] + ids,
+    return st.selectbox("Open the details (or select a table row)", [None] + ids,
                         index=ids.index(picked) + 1 if picked else 0, key=f"open_{key}",
                         format_func=lambda a: "—" if a is None else label_of(by[a]))
 
@@ -235,7 +235,7 @@ def download_json(label: str, data: dict, file_name: str, key: str) -> None:
 
 
 def wait_hint() -> None:
-    st.caption("I processi lunghi girano in background: la pagina si aggiorna da sola ogni pochi secondi.")
+    st.caption("Long processes run in the background: the page refreshes itself every few seconds.")
 
 
 def sleep_rerun(seconds: float = 0.5) -> None:

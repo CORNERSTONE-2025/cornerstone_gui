@@ -74,22 +74,22 @@ class JobManager:
         problems = list(self.settings.problems())
         free_gb = shutil.disk_usage(self.store.workspace).free / 1e9
         if free_gb < self.settings.min_free_disk_gb:
-            problems.append(f"Spazio disco insufficiente: {free_gb:.1f} GB liberi "
-                            f"(minimo {self.settings.min_free_disk_gb} GB)")
+            problems.append(f"Not enough disk space: {free_gb:.1f} GB free "
+                            f"(minimum {self.settings.min_free_disk_gb} GB)")
         for aid in artifact_ids:
             m = self.store.get(aid)
             if m["type"] not in RUNNABLE:
-                problems.append(f"{aid}: il tipo '{m['type']}' non si esegue")
+                problems.append(f"{aid}: type '{m['type']}' is not runnable")
             if m["status"] == "running":
-                problems.append(f"{aid} è già in esecuzione")
+                problems.append(f"{aid} is already running")
             if m["status"] == "completed":
-                problems.append(f"{aid} è già completato: crea una nuova variante per rieseguirlo")
+                problems.append(f"{aid} is already completed: create a new variant to run it again")
         return problems
 
     def launch(self, artifact_ids: list[str]) -> dict:
         problems = self.preflight(artifact_ids)
         if problems:
-            raise StoreError("Impossibile avviare il job:\n- " + "\n- ".join(problems))
+            raise StoreError("Cannot start the job:\n- " + "\n- ".join(problems))
         job_id = f"job-{time.strftime('%Y%m%d-%H%M%S')}-{os.urandom(2).hex()}"
         log = self.dir / f"{job_id}.log"
         cmd = [self.settings.python, "-m", "cs_gui.runner",
@@ -151,7 +151,7 @@ class JobManager:
         for aid in job["artifacts"]:
             if self.store.exists(aid) and self.store.get(aid)["status"] in ("pending", "running"):
                 self.store.set_status(aid, "cancelled", finished_at=now_iso(),
-                                      error="Annullato dall'utente")
+                                      error="Cancelled by the user")
 
     def reconcile(self) -> list[str]:
         """Mark as failed the artifacts whose job process died without updating them."""
@@ -164,7 +164,7 @@ class JobManager:
                 continue
             if not pid_alive(self.get(job_id).get("pid")):
                 self.store.set_status(m["id"], "failed", finished_at=now_iso(),
-                                      error="Il processo è terminato inaspettatamente "
-                                            "(crash, kill o riavvio). Vedi il log del job.")
+                                      error="The process ended unexpectedly "
+                                            "(crash, kill or restart). See the job log.")
                 fixed.append(m["id"])
         return fixed

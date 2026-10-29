@@ -8,7 +8,7 @@ from importlib import metadata
 
 from ..settings import PROJECT_ROOT
 
-PACKAGES = ["numpy", "pandas", "h5py", "scikit-learn", "scipy", "torch", "xgboost", "sktime",
+PACKAGES = ["numpy", "pandas", "h5py", "scikit-learn", "scipy", "torch", "xgboost", "xgboost-cpu", "sktime",
             "clearml", "cupy-cuda12x"]
 
 

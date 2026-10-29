@@ -137,11 +137,11 @@ def step_dataset(ctx: Ctx) -> dict:
     )
     files = sorted(ctx.dir.glob("*.h5"))
     if not files:
-        raise RuntimeError("create_hdf5_from_db non ha prodotto alcun file HDF5")
+        raise RuntimeError("create_hdf5_from_db did not produce any HDF5 file")
     h5 = files[0]
     s = h5info.summarize(str(h5))
     if s["n_samples"] == 0:
-        raise RuntimeError("Il dataset estratto è vuoto: nessun evento con dati nel database")
+        raise RuntimeError("The extracted dataset is empty: no event has data in the database")
     s["h5_file"] = h5.name
     s["label_key"] = f"{cls}_delta{c['window_hours']}"
     s["label_horizon_hours"] = int(lc["delta_hours"])
@@ -206,14 +206,14 @@ def step_split(ctx: Ctx) -> dict:
         cs.create_dataset_splits(cfg)
     except TypeError as e:
         if "NoneType" in str(e) and cfg.get("SPLITTING_STRATEGY") == "chronological":
-            raise RuntimeError("Lo split cronologico non ha prodotto un test set (nessun campione nella "
-                               "finestra/dopo la data di cutoff). Modifica TEST_CUTOFF_DATE o TEST_TIME_WINDOW.") from e
+            raise RuntimeError("The chronological split produced no test set (no sample in the window/after "
+                               "the cutoff date). Change TEST_CUTOFF_DATE or TEST_TIME_WINDOW.") from e
         raise
     _rmdir_if_empty(ctx.dir / "_cornerstone_tmp")
     split_dir = ctx.dir / SPLIT_PREFIX
     files = _split_files(split_dir)
     if "test" not in files:
-        raise RuntimeError("Nessun file di split prodotto")
+        raise RuntimeError("No split file was produced")
     per_file = {}
     for name, p in files.items():
         s = h5info.summarize(str(p), max_rows_for_nan=2000)
@@ -297,7 +297,7 @@ def step_training(ctx: Ctx) -> dict:
     windows = ctx.config["windows"]
     window_map = {w: int(ctx.config["window_map"][w]) for w in windows}
     if max(window_map.values()) > split["summary"]["timesteps"]:
-        raise RuntimeError(f"Finestra più lunga ({max(window_map.values())} step) dei timesteps del dataset "
+        raise RuntimeError(f"Window longer ({max(window_map.values())} steps) than the dataset timesteps "
                            f"({split['summary']['timesteps']})")
     training_cfg = dict(mc["training_config"])
     training_cfg["n_folds"] = int(ctx.config["n_folds"])
@@ -326,7 +326,7 @@ def step_training(ctx: Ctx) -> dict:
     pm = _path_manager(results, task, model)
     mfiles = glob.glob(os.path.join(pm.task_dir, "metrics", f"*_metrics_{pm.model_type}.json"))
     if not mfiles:
-        raise RuntimeError("Il training non ha prodotto il file di metriche atteso")
+        raise RuntimeError("Training did not produce the expected metrics file")
     metrics = json.loads(Path(mfiles[0]).read_text())
     adapters_used = []
     if model in PT_MODELS:
@@ -339,8 +339,8 @@ def step_training(ctx: Ctx) -> dict:
         "task_dir": os.path.relpath(pm.task_dir, ctx.dir), "metrics_file": os.path.relpath(mfiles[0], ctx.dir),
         "train_config": "train_config.json", "rows": rows, "training_seconds": round(elapsed, 1),
         "adapters": adapters_used,
-        "notes": ["test_* = metriche calcolate dal pacchetto sul test set dello split durante il training "
-                  "(per fold). Per la valutazione usa un artefatto di Inferenza."],
+        "notes": ["test_* = metrics computed by the package on the split test set during training "
+                  "(per fold). Use an Inference artifact for the evaluation."],
     }
 
 
@@ -354,7 +354,7 @@ def _write_inference_input(src: Path, dst: Path, features: list[str], harp_filte
         names = h5info.feature_names(str(src))
         missing = [x for x in features if x not in names]
         if missing:
-            raise RuntimeError(f"Il dataset di inferenza non contiene le feature del modello: {missing}")
+            raise RuntimeError(f"The inference dataset does not contain the model features: {missing}")
         cols = [names.index(x) for x in features]
         harp = f["HARPNUM"][:]
         ts = f["timestamps"][:]
@@ -368,7 +368,7 @@ def _write_inference_input(src: Path, dst: Path, features: list[str], harp_filte
             keep &= it <= t_end
         idx = np.flatnonzero(keep)
         if idx.size == 0:
-            raise RuntimeError("Nessun campione soddisfa i filtri di inferenza (HARP / intervallo temporale)")
+            raise RuntimeError("No sample matches the inference filters (HARP / time range)")
         yu_key = "Y_u" if "Y_u" in f else next((k for k in f.keys() if k.startswith("label_u_")), None)
         with h5py.File(dst, "w") as g:
             g.create_dataset("X", data=f["X"][idx][:, :, cols])
@@ -419,7 +419,7 @@ def step_inference(ctx: Ctx) -> dict:
     elif src["type"] == "dataset":
         src_file = src_dir / src["summary"]["h5_file"]
     else:
-        raise RuntimeError(f"Sorgente di inferenza non supportata: {src['type']}")
+        raise RuntimeError(f"Unsupported inference source: {src['type']}")
     inp = ctx.dir / "inference_input.h5"
     sel = _write_inference_input(src_file, inp, features, c.get("harp_filter") or [],
                                  c.get("time_start"), c.get("time_end"))
@@ -446,7 +446,7 @@ def step_inference(ctx: Ctx) -> dict:
             est = joblib.load(path)
             p = est.predict_proba(ds.X.numpy(), mask=ds.mask.numpy())[:, 1]
             y = ds.Y.numpy().astype(int)
-            cv_thr, cv_src = getattr(est, "threshold_", None), "model.threshold_ (ottimizzata su validation)"
+            cv_thr, cv_src = getattr(est, "threshold_", None), "model.threshold_ (optimized on validation)"
         else:
             from cornerstone.ml.model_configs import MODEL_CONFIGS
             from cornerstone.ml.utils.model_manager import ModelManager
@@ -458,15 +458,15 @@ def step_inference(ctx: Ctx) -> dict:
             z, y, _, _ = collect_logits(net, DataLoader(ds, batch_size=256), device=device)
             p, y = sigmoid(z), y.astype(int)
             cv_thr = pkg_metrics[w]["folds"][k].get("best_threshold")
-            cv_src = f"best_threshold del fold {k} (ottimizzata su validation, probabilità sigmoid non calibrate)"
+            cv_src = f"best_threshold of fold {k} (optimized on validation, uncalibrated sigmoid probabilities)"
         if len(p) != len(meta["HARPNUM"]):
-            raise RuntimeError("Disallineamento tra predizioni e metadati dei campioni")
+            raise RuntimeError("Predictions and sample metadata are misaligned")
         if c.get("threshold_mode", "cv") == "cv":
             if cv_thr is None:
-                raise RuntimeError("Soglia ottimizzata in CV non disponibile per questo modello: usa una soglia fissa")
+                raise RuntimeError("No CV-optimized threshold available for this model: use a fixed threshold")
             thr, thr_src = float(cv_thr), cv_src
         else:
-            thr, thr_src = float(c["threshold"]), "soglia fissa scelta dall'utente"
+            thr, thr_src = float(c["threshold"]), "fixed threshold chosen by the user"
         overlap = np.array([(int(h), str(t)) in trainval_keys for h, t in zip(meta["HARPNUM"], meta["t_issue"])])
         harp_overlap = np.isin(meta["HARPNUM"], list(trainval_harps))
         df = pd.DataFrame({"window": w, "HARPNUM": meta["HARPNUM"], "t_issue": meta["t_issue"],
@@ -489,8 +489,8 @@ def step_inference(ctx: Ctx) -> dict:
                                               group=meta["HARPNUM"][evalmask] if boot.get("cluster", True) else None)
         else:
             entry["metrics"] = None
-            entry["note"] = ("Metriche non calcolabili: servono campioni valutabili di entrambe le classi "
-                             "(ground truth assente o una sola classe).")
+            entry["note"] = ("Metrics not computable: evaluable samples of both classes are needed "
+                             "(no ground truth or a single class).")
         per_window[w] = entry
     pd.concat(all_rows).to_csv(ctx.dir / "predictions.csv", index=False)
     (ctx.dir / "metrics.json").write_text(json.dumps(per_window, indent=2, default=float))

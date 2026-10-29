@@ -38,7 +38,7 @@ def test_diff_and_export(store, settings):
     d = store.create("split", "S2", {"N_FOLDS": 5}, parents={"dataset": b["id"]})
     pl = Pipeline(settings, store)
     diff = pl.diff(c["id"], d["id"])
-    assert diff == [{"chiave": "config.N_FOLDS", c["id"]: 3, d["id"]: 5}]
+    assert diff == [{"key": "config.N_FOLDS", c["id"]: 3, d["id"]: 5}]
     exp = pl.export(c["id"])
     assert [x["id"] for x in exp["chain"]] == [a["id"], b["id"], c["id"]]
     json.dumps(exp)
@@ -55,7 +55,7 @@ def test_reconcile_marks_dead_jobs_failed(store, settings):
     store.set_status(c["id"], "running", job_id="job-x")
     assert jm.reconcile() == [c["id"]]
     m = store.get(c["id"])
-    assert m["status"] == "failed" and "inaspettatamente" in m["run"]["error"]
+    assert m["status"] == "failed" and "unexpectedly" in m["run"]["error"]
 
 
 def test_preflight_refuses_completed_and_bad_settings(store, settings, tmp_path):
@@ -63,8 +63,8 @@ def test_preflight_refuses_completed_and_bad_settings(store, settings, tmp_path)
     settings.cornerstone_python = str(tmp_path / "nope" / "python")
     jm = JobManager(settings, store)
     problems = jm.preflight([b["id"]])
-    assert any("già completato" in p for p in problems)
-    assert any("Interprete" in p for p in problems)
+    assert any("already completed" in p for p in problems)
+    assert any("interpreter" in p for p in problems)
     with pytest.raises(StoreError):
         jm.launch([c["id"]])
     assert store.get(c["id"])["status"] == "pending"                 # nothing marked as started

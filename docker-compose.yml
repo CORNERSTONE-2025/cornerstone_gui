@@ -1,0 +1,30 @@
+# CORNERSTONE GUI with Docker Compose.
+#
+#   docker compose up --build -d     # build and start, then open http://localhost:8501
+#   docker compose logs -f           # follow the logs
+#   docker compose down              # stop (the workspace volume is kept)
+#
+# Real data: put the CORNERSTONE SQLite database in ./data/cornerstone.sqlite, or set
+# CORNERSTONE_DB_DIR / CORNERSTONE_DB_FILE (e.g. in a .env file next to this one).
+# Without a database the GUI starts in demo mode on synthetic data.
+services:
+  gui:
+    build:
+      context: .
+      args:
+        CORNERSTONE_REF: ${CORNERSTONE_REF:-main}
+    image: cornerstone-gui:latest
+    ports:
+      # only reachable from this computer; remove "127.0.0.1:" to expose it on the network
+      - "127.0.0.1:${CS_GUI_PORT:-8501}:8501"
+    environment:
+      CS_GUI_DB_PATH: /data/${CORNERSTONE_DB_FILE:-cornerstone.sqlite}
+    volumes:
+      - workspace:/workspace
+      - ${CORNERSTONE_DB_DIR:-./data}:/data:ro
+    # PyTorch data loaders and the package multiprocessing pools use shared memory
+    shm_size: "2gb"
+    restart: unless-stopped
+
+volumes:
+  workspace:

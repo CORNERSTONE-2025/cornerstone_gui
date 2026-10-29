@@ -1,0 +1,26 @@
+# Runtime dependencies of the CORNERSTONE package inside the Docker image (CPU only).
+# The package has no dependency list of its own: these are the libraries it imports, pinned to the
+# versions of the environment it was developed with. torch comes from the PyTorch CPU index
+# (see the Dockerfile); xgboost-cpu avoids the multi-GB CUDA wheels.
+torch==2.9.1
+numpy==2.2.6
+pandas==2.3.3
+scipy==1.15.3
+scikit-learn==1.7.2
+xgboost-cpu==3.1.2
+sktime==0.39.0
+h5py==3.15.1
+matplotlib==3.10.7
+sqlalchemy==2.0.45
+clearml==2.0.2
+einops==0.8.1
+reformer-pytorch==1.4.4
+transformers==4.57.1
+tqdm==4.67.1
+joblib==1.5.2
+sympy==1.14.0
+requests==2.32.5
+gdown==5.2.0
+# imported at module level by the ROCKET/MINIROCKET models: installed so the package imports,
+# but those two models still need a CUDA GPU to run
+cupy-cuda12x==13.6.0

@@ -1,113 +1,129 @@
 # CORNERSTONE GUI
 
-Interfaccia grafica per il pacchetto [CORNERSTONE DB package](https://github.com/CORNERSTONE-2025/cornerstone_db_package)
-(previsione dei flare solari da parametri SHARP/HMI delle Active Region). Permette di eseguire e gestire
-l'intera pipeline senza scrivere codice:
+Graphical interface for the [CORNERSTONE DB package](https://github.com/CORNERSTONE-2025/cornerstone_db_package)
+(solar flare forecasting from the SHARP/HMI parameters of Active Regions). It runs and manages the
+whole pipeline without writing code:
 
-**DB SQLite → labeling → dataset HDF5 → filtri e split → configurazione modello → training CV → inferenza
-su eventi non visti → metriche, confronto, storia delle Active Region**
+**SQLite DB → labeling → HDF5 dataset → filters and split → model configuration → CV training → inference
+on unseen events → metrics, comparison, Active Region history**
 
-Ogni passo usa le funzioni reali del pacchetto e produce un **artefatto persistente e versionato**
-(configurazione, file, log, checksum, versioni del codice), così gli esperimenti si possono riprendere,
-riprodurre e confrontare.
+Every step uses the real functions of the package and produces a **persistent, versioned artifact**
+(configuration, files, log, checksums, code versions), so experiments can be resumed, reproduced and compared.
 
-> La GUI non modifica il codice del pacchetto né il database condiviso (aperto in sola lettura).
+> The GUI modifies neither the package code nor the shared database (opened read-only).
 
-## Requisiti
+## Quick start with Docker (recommended)
+
+```bash
+git clone https://github.com/CORNERSTONE-2025/cornerstone_gui.git
+cd cornerstone_gui
+docker compose up --build -d          # then open http://localhost:8501
+```
+
+Without a database the GUI starts in demo mode on synthetic data. To use real data, put the
+CORNERSTONE database in `data/cornerstone.sqlite` and choose *Real* mode on the Home page.
+All details: [docs/DOCKER.md](docs/DOCKER.md).
+
+## Local installation (without Docker)
+
+Requirements:
 
 - Linux, Python ≥ 3.10, [uv](https://docs.astral.sh/uv/).
-- Un checkout del pacchetto CORNERSTONE con il suo virtualenv funzionante
-  (`<cornerstone>/.venv`, con torch, xgboost, h5py, clearml…) e il database SQLite locale.
-- GPU CUDA solo per ROCKET/MINIROCKET (cupy). Gli altri modelli girano anche su CPU.
-
-## Installazione
+- A checkout of the CORNERSTONE package with a working environment (its `.venv` with torch,
+  xgboost, h5py, clearml…; [docker/requirements-cornerstone.txt](docker/requirements-cornerstone.txt) lists
+  what it needs) and the local SQLite database.
+- A CUDA GPU only for ROCKET/MINIROCKET (cupy). The other models also run on CPU.
 
 ```bash
-git clone <questo repository> cornerstone_gui
+git clone https://github.com/CORNERSTONE-2025/cornerstone_gui.git
 cd cornerstone_gui
-uv sync                       # crea .venv con streamlit, plotly, pandas, h5py, scikit-learn, pytest
-cp config/gui_settings.example.json gui_settings.json   # opzionale: modifica i percorsi
+uv sync                       # creates .venv with streamlit, plotly, pandas, h5py, scikit-learn, pytest
+cp config/gui_settings.example.json gui_settings.json   # optional: edit the paths
+uv run streamlit run app/streamlit_app.py               # then open http://localhost:8501
 ```
 
-Impostazioni (file `gui_settings.json`, variabili `CS_GUI_*` o pagina Home):
+Settings (file `gui_settings.json`, `CS_GUI_*` environment variables, or the Home page):
 
-| chiave | default | significato |
+| key | default | meaning |
 |---|---|---|
-| `cornerstone_root` | `/bigdisk/daniele/cornerstone_module` | checkout del pacchetto |
-| `cornerstone_python` | `<root>/.venv/bin/python` | interprete usato per eseguire i passi |
-| `db_path` | `local_db_path` di `cornerstone/configs/db_config.json` | DB SQLite reale |
-| `workspace` | `./workspace` | artefatti della modalità reale |
-| `mode` | `real` | `real` oppure `demo` (DB sintetico in `./workspace_demo`) |
-| `min_free_disk_gb` | 5 | spazio minimo per avviare un job |
+| `cornerstone_root` | the importable `cornerstone` package, else `../cornerstone_db_package` | package checkout |
+| `cornerstone_python` | `<root>/.venv/bin/python`, else the GUI interpreter | interpreter used to run the steps |
+| `db_path` | `local_db_path` from `cornerstone/configs/db_config.json` | real SQLite DB |
+| `workspace` | `./workspace` | artifacts of real mode |
+| `mode` | `real` | `real` or `demo` (synthetic DB in `./workspace_demo`) |
+| `min_free_disk_gb` | 5 | minimum free space to start a job |
 
-## Avvio
+Environment variables: `CS_GUI_CORNERSTONE_ROOT`, `CS_GUI_CORNERSTONE_PYTHON`, `CS_GUI_DB_PATH`,
+`CS_GUI_WORKSPACE`, `CS_GUI_DEMO_WORKSPACE`, `CS_GUI_MODE`, `CS_GUI_SETTINGS_FILE`. They take precedence
+over the settings file.
+
+On a remote server, reach the GUI through an SSH tunnel (`ssh -L 8501:localhost:8501 user@server`)
+rather than exposing the port: the GUI has no login.
+
+## Full workflow in the GUI
+
+1. **Labeling** — snapshot of a label table already in the DB (fast) or generation with
+   `splitting_labeling` on a private DB.
+2. **Dataset → HDF5 extraction** — history window, cadence, feature version (clean/all),
+   optional subsample for quick tests.
+3. **Dataset → Filters and split** — features, missing data, time and quality filters, random or
+   chronological split by Active Region, number of folds.
+4. **Model configuration** — algorithm, hyperparameters, loss, early stopping, threshold, seed.
+5. **Training and validation** — time windows, folds, device; the job runs in the background with a live log.
+6. **Inference** — on the split test set (or other unseen data), CV or fixed threshold, bootstrap CI.
+7. **Global metrics**, **Algorithm comparison**, **Active Regions** for the analysis.
+8. **Experiments and pipeline** for catalogue, dependencies, integrity, variants, reproduction, export.
+
+Every form shows the configuration summary and the validation errors **before** running.
+
+## Full pipeline without the GUI
 
 ```bash
-uv run streamlit run app/streamlit_app.py
-# poi apri http://localhost:8501  (su server remoto: --server.address 0.0.0.0 oppure un tunnel ssh)
-```
-
-## Flusso completo dalla GUI
-
-1. **Labeling** — snapshot di una tabella di label già presente nel DB (veloce) o generazione con
-   `splitting_labeling` su un DB privato.
-2. **Dataset → Estrazione HDF5** — finestra storica, cadenza, versione delle feature (clean/all),
-   eventuale sottocampione per prove rapide.
-3. **Dataset → Filtri e split** — feature, dati mancanti, filtri temporali e di qualità, split casuale o
-   cronologico per Active Region, numero di fold.
-4. **Configurazione modelli** — algoritmo, iperparametri, loss, early stopping, soglia, seed.
-5. **Training e validazione** — finestre temporali, fold, dispositivo; il job gira in background con log live.
-6. **Inferenza** — sul test set dello split (o altri dati non visti), soglia CV o fissa, CI bootstrap.
-7. **Metriche globali**, **Confronto algoritmi**, **Active Regions** per l'analisi.
-8. **Esperimenti e pipeline** per catalogo, dipendenze, integrità, varianti, riproduzione, export.
-
-Ogni form mostra il riepilogo della configurazione e gli errori di validazione **prima** dell'esecuzione.
-
-## Pipeline completa senza GUI
-
-```bash
-uv run python examples/run_pipeline.py                  # modalità reale, sottocampione di 600 eventi
-uv run python examples/run_pipeline.py --mode demo      # DB sintetico (solo prova)
+uv run python examples/run_pipeline.py                  # real mode, subsample of 600 events
+uv run python examples/run_pipeline.py --mode demo      # synthetic DB (test only)
 uv run python examples/run_pipeline.py --model model_lstm.json
 ```
 
-Le configurazioni sono in `examples/configs/` (label, dataset, split random e cronologico, XGBoost, LSTM,
-training, inferenza). Gli artefatti creati compaiono subito nella GUI.
+The configurations are in `examples/configs/` (labels, dataset, random and chronological split, XGBoost, LSTM,
+training, inference). The artifacts created show up in the GUI right away.
+With Docker: `docker compose exec gui python examples/run_pipeline.py --mode demo`.
 
-## Salvare e riprodurre un esperimento
+## Saving and reproducing an experiment
 
-- Ogni esecuzione è salvata automaticamente in `workspace/artifacts/<id>/` (vedi [docs/ARTIFACTS.md](docs/ARTIFACTS.md)).
-- **Variante**: pagina *Esperimenti* → *Azioni* → modifica il JSON → *Crea variante* (l'originale resta intatto).
-  Per i modelli: *Configurazione modelli* → "Parti da una configurazione esistente".
-- **Riproduci questo passo**: stesso input e stessa configurazione, nuovo artefatto.
-- **Riproduci l'intera catena**: nuove copie di tutti i passi a monte, collegate tra loro.
-- **Riprendi**: esegue solo i passi non ancora completati della catena (ripartenza dopo errori o interruzioni).
-- **Esporta**: JSON con manifest, configurazioni e provenienza di tutta la catena.
-- **Verifica integrità**: sha256 dei file e stato delle dipendenze.
+- Every run is saved automatically in `workspace/artifacts/<id>/` (see [docs/ARTIFACTS.md](docs/ARTIFACTS.md)).
+- **Variant**: *Experiments* page → *Actions* → edit the JSON → *Create variant* (the original stays intact).
+  For models: *Model configuration* → "Start from an existing configuration".
+- **Reproduce this step**: same input and configuration, new artifact.
+- **Reproduce the whole chain**: new copies of all upstream steps, wired to each other.
+- **Resume**: runs only the steps of the chain not completed yet (restart after errors or interruptions).
+- **Export**: JSON with manifest, configurations and provenance of the whole chain.
+- **Verify integrity**: sha256 of the files and status of the dependencies.
 
-## Modalità demo
+## Demo mode
 
-Pagina Home → modalità *Demo* → *Genera DB demo*. Il database è **sintetico** (stesso schema del DB reale,
-valori generati) e serve solo per provare la GUI e per i test: ogni pagina mostra un banner e gli artefatti demo
-stanno in un workspace separato. I risultati demo non hanno alcun valore scientifico.
+Home page → *Demo* mode → *Generate demo DB* (done automatically by the Docker image when no database is
+mounted). The database is **synthetic** (same schema as the real DB, generated values) and is only meant
+for trying out the GUI and for the tests: every page shows a banner and demo artifacts live in a separate
+workspace. Demo results have no scientific value.
 
-## Test
+## Tests
 
 ```bash
-uv run pytest -m "not integration"     # unitari: archivio, validazione, metriche, job, adattatori (~3 s)
-uv run pytest -m integration           # pacchetto reale sul DB demo + tutte le pagine (AppTest) (~5 min)
+uv run pytest -m "not integration"     # unit: store, validation, metrics, jobs, adapters (~3 s)
+uv run pytest -m integration           # real package on the demo DB + all pages (AppTest) (~5 min)
 ```
 
-## Documentazione
+## Documentation
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): analisi del pacchetto, architettura, adattatori, data leakage, limitazioni.
-- [docs/ARTIFACTS.md](docs/ARTIFACTS.md): formato di esperimenti, artefatti, predizioni.
-- [docs/PAGES.md](docs/PAGES.md): pagine e parametri.
+- [docs/DOCKER.md](docs/DOCKER.md): Docker image, database, volumes, options.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): package analysis, architecture, adapters, data leakage, limitations.
+- [docs/ARTIFACTS.md](docs/ARTIFACTS.md): format of experiments, artifacts, predictions.
+- [docs/PAGES.md](docs/PAGES.md): pages and parameters.
 
-## Limitazioni principali
+## Main limitations
 
-- Nessun dato CME nel database: sezioni CME non disponibili.
-- ROCKET/MINIROCKET richiedono GPU.
-- Riproducibilità bit-a-bit non garantita per i modelli PyTorch; commit, versioni e seed sono registrati.
-- Il labeling generato copre l'intervallo fisso del pacchetto (1996–2025) ed è lento.
-- `db_update()` (download dei dump da Google Drive) non è esposto nella GUI.
+- No CME data in the database: CME sections are not available.
+- ROCKET/MINIROCKET require a GPU (not available in the Docker image).
+- Bit-for-bit reproducibility is not guaranteed for PyTorch models; commit, versions and seeds are recorded.
+- Generated labeling covers the fixed range of the package (1996–2025) and is slow.
+- `db_update()` (download of the dumps from Google Drive) is not exposed in the GUI.

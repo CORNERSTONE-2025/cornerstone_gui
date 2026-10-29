@@ -17,9 +17,9 @@ from .settings import Settings
 from .store import ArtifactStore, StoreError
 
 # --------------------------------------------------------------------------- package options
-LABEL_TYPES = {"Cplus": "C+ (flusso ≥ 1e-6 W/m²)", "Mplus": "M+ (≥ 1e-5)", "Xplus": "X+ (≥ 1e-4)"}   # splitting_labeling
+LABEL_TYPES = {"Cplus": "C+ (flux ≥ 1e-6 W/m²)", "Mplus": "M+ (≥ 1e-5)", "Xplus": "X+ (≥ 1e-4)"}   # splitting_labeling
 TABLE_TYPES = {"DEF": "DEF (definitive SHARP CEA)", "NRT": "NRT (near-real-time)"}
-DATA_VERSIONS = {"clean": "clean (17 feature normalizzate _N1/_N2)", "all": "all (22 feature SHARP)"}  # _select_db_config
+DATA_VERSIONS = {"clean": "clean (17 normalized features _N1/_N2)", "all": "all (22 SHARP features)"}  # _select_db_config
 MISSINGNESS_MODES = ["multi_window_empty", "multi_window", "single_window", "none"]   # create_dataset_splits step 8
 TEMPORAL_FILTER_MODES = [None, "select", "filter", "exclude"]                          # step 9
 CMASK_STRATEGIES = ["any", "majority", "average", "minimum"]                          # CMASKFilter
@@ -63,7 +63,7 @@ def package_info(settings: Settings, refresh: bool = False, timeout: int = 600) 
                             "--cornerstone-root", settings.cornerstone_root],
                            env=runner_env(settings), capture_output=True, text=True, timeout=timeout)
         if r.returncode != 0:
-            raise RuntimeError("Introspezione del pacchetto fallita:\n" + r.stdout[-3000:] + r.stderr[-3000:])
+            raise RuntimeError("Package introspection failed:\n" + r.stdout[-3000:] + r.stderr[-3000:])
     return json.loads(out.read_text())
 
 
@@ -74,31 +74,31 @@ def _date(s, field) -> dt.date | None:
     try:
         return dt.date.fromisoformat(str(s)[:10])
     except ValueError:
-        raise ValueError(f"{field}: data non valida '{s}' (formato YYYY-MM-DD)")
+        raise ValueError(f"{field}: invalid date '{s}' (format YYYY-MM-DD)")
 
 
 def _check_range(errs, name, value, lo=None, hi=None, integer=False):
     if value is None:
-        errs.append(f"{name}: valore obbligatorio")
+        errs.append(f"{name}: value required")
         return
     if integer and (not isinstance(value, int) or isinstance(value, bool)):
-        errs.append(f"{name}: deve essere un intero")
+        errs.append(f"{name}: must be an integer")
         return
     if lo is not None and value < lo:
-        errs.append(f"{name}: deve essere ≥ {lo}")
+        errs.append(f"{name}: must be ≥ {lo}")
     if hi is not None and value > hi:
-        errs.append(f"{name}: deve essere ≤ {hi}")
+        errs.append(f"{name}: must be ≤ {hi}")
 
 
 def _require_completed(store: ArtifactStore, aid: str | None, expected_type, role: str) -> dict:
     if not aid:
-        raise StoreError(f"Seleziona l'artefatto '{role}'")
+        raise StoreError(f"Select the '{role}' artifact")
     m = store.get(aid)
     types = expected_type if isinstance(expected_type, (list, tuple)) else [expected_type]
     if m["type"] not in types:
-        raise StoreError(f"'{role}' deve essere di tipo {types}, trovato {m['type']}")
+        raise StoreError(f"'{role}' must be of type {types}, found {m['type']}")
     if m["status"] != "completed":
-        raise StoreError(f"L'artefatto {aid} ({role}) non è completato (stato: {m['status']})")
+        raise StoreError(f"Artifact {aid} ({role}) is not completed (status: {m['status']})")
     return m
 
 
@@ -106,11 +106,11 @@ def _require_completed(store: ArtifactStore, aid: str | None, expected_type, rol
 def validate_labels(cfg: dict, settings: Settings) -> list[str]:
     errs = []
     if cfg.get("source") not in ("existing", "generate"):
-        errs.append("source: 'existing' o 'generate'")
+        errs.append("source: 'existing' or 'generate'")
     if cfg.get("table_type") not in TABLE_TYPES:
-        errs.append(f"table_type: uno tra {list(TABLE_TYPES)}")
+        errs.append(f"table_type: one of {list(TABLE_TYPES)}")
     if cfg.get("label_type") not in LABEL_TYPES:
-        errs.append(f"label_type: uno tra {list(LABEL_TYPES)}")
+        errs.append(f"label_type: one of {list(LABEL_TYPES)}")
     _check_range(errs, "delta_hours", cfg.get("delta_hours"), 1, 240, integer=True)
     if errs:
         return errs
@@ -118,18 +118,18 @@ def validate_labels(cfg: dict, settings: Settings) -> list[str]:
     if cfg["source"] == "existing":
         t = f"DF_{cfg['table_type']}_{cfg['label_type']}_delta{cfg['delta_hours']}_three_classes"
         if t not in dbq.tables(db):
-            errs.append(f"La tabella '{t}' non esiste nel database: scegli 'genera' oppure un'altra combinazione")
+            errs.append(f"Table '{t}' does not exist in the database: choose 'generate' or another combination")
     else:
         for t in (f"SHARPC_all_{cfg['table_type']}", f"NOAA_SHARPC_{cfg['table_type']}_AR"):
             if t not in dbq.tables(db):
-                errs.append(f"Tabella necessaria al labeling assente nel database: {t}")
+                errs.append(f"Table required for labeling missing from the database: {t}")
     return errs
 
 
 def validate_dataset(cfg: dict, labels: dict, settings: Settings) -> list[str]:
     errs = []
     if cfg.get("data_version") not in DATA_VERSIONS:
-        errs.append(f"data_version: uno tra {list(DATA_VERSIONS)}")
+        errs.append(f"data_version: one of {list(DATA_VERSIONS)}")
     _check_range(errs, "window_hours", cfg.get("window_hours"), 1, 240, integer=True)
     _check_range(errs, "buffer_minutes", cfg.get("buffer_minutes"), 0, 120, integer=True)
     _check_range(errs, "sampling_interval", cfg.get("sampling_interval"), 1, 120, integer=True)
@@ -138,7 +138,7 @@ def validate_dataset(cfg: dict, labels: dict, settings: Settings) -> list[str]:
     if not errs:
         t = f"SHARPC_{cfg['data_version']}_{labels['config']['table_type']}"
         if t not in dbq.tables(settings.active_db_path):
-            errs.append(f"Tabella feature assente nel database: {t}")
+            errs.append(f"Feature table missing from the database: {t}")
     return errs
 
 
@@ -150,65 +150,65 @@ def validate_split(cfg: dict, dataset: dict, info: dict | None = None) -> list[s
     if mode == "direct":
         sel = cfg.get("DIRECT_FEATURES") or []
         if not sel:
-            errs.append("Seleziona almeno una feature")
+            errs.append("Select at least one feature")
         bad = [f for f in sel if f not in feats]
         if bad:
-            errs.append(f"Feature non presenti nel dataset: {bad}")
+            errs.append(f"Features not in the dataset: {bad}")
     elif mode == "criterion":
         groups = (info or {}).get("feature_groups", {})
         crit = cfg.get("FEATURE_CRITERION")
         if crit not in groups:
-            errs.append(f"FEATURE_CRITERION sconosciuto: {crit}")
+            errs.append(f"Unknown FEATURE_CRITERION: {crit}")
         else:
             miss = [f for f in groups[crit] if f not in feats]
             if miss:
-                errs.append(f"Il gruppo '{crit}' contiene feature assenti in questo dataset: {miss}. "
-                            "Usa la selezione diretta.")
+                errs.append(f"Group '{crit}' contains features missing from this dataset: {miss}. "
+                            "Use direct selection.")
     else:
-        errs.append("FEATURE_SELECTION_MODE: 'direct' o 'criterion'")
+        errs.append("FEATURE_SELECTION_MODE: 'direct' or 'criterion'")
     ts = cfg.get("TIMESTEPS")
     _check_range(errs, "TIMESTEPS", ts, 1, s.get("timesteps"), integer=True)
     mm = cfg.get("MISSINGNESS_FILTER_MODE")
     if mm not in MISSINGNESS_MODES:
-        errs.append(f"MISSINGNESS_FILTER_MODE: uno tra {MISSINGNESS_MODES}")
+        errs.append(f"MISSINGNESS_FILTER_MODE: one of {MISSINGNESS_MODES}")
     if mm in ("single_window", "multi_window"):
         _check_range(errs, "MAX_NAN_RATIO", cfg.get("MAX_NAN_RATIO"), 0.0, 1.0)
     if mm in ("multi_window", "multi_window_empty"):
         tw = cfg.get("TIME_WINDOWS") or []
         if not tw or any((not isinstance(w, int)) or w < 1 or (ts and w > ts) for w in tw):
-            errs.append(f"TIME_WINDOWS: interi tra 1 e TIMESTEPS ({ts})")
+            errs.append(f"TIME_WINDOWS: integers between 1 and TIMESTEPS ({ts})")
     tfm = cfg.get("TEMPORAL_FILTER_MODE")
     if tfm not in TEMPORAL_FILTER_MODES:
-        errs.append(f"TEMPORAL_FILTER_MODE: uno tra {TEMPORAL_FILTER_MODES}")
+        errs.append(f"TEMPORAL_FILTER_MODE: one of {TEMPORAL_FILTER_MODES}")
     try:
         if tfm:
             a, b = (cfg.get("TEMPORAL_WINDOW") or [None, None])
             da, db_ = _date(a, "TEMPORAL_WINDOW"), _date(b, "TEMPORAL_WINDOW")
             if not (da and db_) or da >= db_:
-                errs.append("TEMPORAL_WINDOW: inizio < fine")
+                errs.append("TEMPORAL_WINDOW: start < end")
         if cfg.get("MULTI_PERIOD_FILTER"):
             for a, b in cfg.get("PROBLEMATIC_PERIODS") or []:
                 if _date(a, "PROBLEMATIC_PERIODS") >= _date(b, "PROBLEMATIC_PERIODS"):
-                    errs.append(f"Periodo escluso non valido: {a} → {b}")
+                    errs.append(f"Invalid excluded period: {a} → {b}")
         strat = cfg.get("SPLITTING_STRATEGY")
         if strat not in SPLIT_STRATEGIES:
-            errs.append(f"SPLITTING_STRATEGY: uno tra {SPLIT_STRATEGIES}")
+            errs.append(f"SPLITTING_STRATEGY: one of {SPLIT_STRATEGIES}")
         cut, win = cfg.get("TEST_CUTOFF_DATE"), cfg.get("TEST_TIME_WINDOW")
         if strat == "random" and (cut or win):
-            errs.append("TEST_CUTOFF_DATE/TEST_TIME_WINDOW valgono solo con lo split cronologico")
+            errs.append("TEST_CUTOFF_DATE/TEST_TIME_WINDOW only apply to the chronological split")
         if cut and win:
-            errs.append("Usa TEST_CUTOFF_DATE oppure TEST_TIME_WINDOW, non entrambi")
-        lo, hi = _date(s.get("time_start"), "inizio dataset"), _date(s.get("time_end"), "fine dataset")
+            errs.append("Use TEST_CUTOFF_DATE or TEST_TIME_WINDOW, not both")
+        lo, hi = _date(s.get("time_start"), "dataset start"), _date(s.get("time_end"), "dataset end")
         if cut:
             c = _date(cut, "TEST_CUTOFF_DATE")
             if lo and hi and not (lo < c < hi):
-                errs.append(f"TEST_CUTOFF_DATE fuori dall'intervallo del dataset ({lo} → {hi})")
+                errs.append(f"TEST_CUTOFF_DATE outside the dataset range ({lo} → {hi})")
         if win:
             a, b = _date(win[0], "TEST_TIME_WINDOW"), _date(win[1], "TEST_TIME_WINDOW")
             if a >= b:
-                errs.append("TEST_TIME_WINDOW: inizio < fine")
+                errs.append("TEST_TIME_WINDOW: start < end")
             elif lo and hi and (b <= lo or a >= hi):
-                errs.append(f"TEST_TIME_WINDOW non interseca il dataset ({lo} → {hi})")
+                errs.append(f"TEST_TIME_WINDOW does not overlap the dataset ({lo} → {hi})")
     except ValueError as e:
         errs.append(str(e))
     if cfg.get("SPLITTING_STRATEGY") == "random":
@@ -217,13 +217,13 @@ def validate_split(cfg: dict, dataset: dict, info: dict | None = None) -> list[s
     _check_range(errs, "RANDOM_STATE", cfg.get("RANDOM_STATE"), 0, None, integer=True)
     if cfg.get("CMASK_FILTER"):
         if cfg.get("CMASK_STRATEGY") not in CMASK_STRATEGIES:
-            errs.append(f"CMASK_STRATEGY: uno tra {CMASK_STRATEGIES}")
+            errs.append(f"CMASK_STRATEGY: one of {CMASK_STRATEGIES}")
         _check_range(errs, "CMASK_THRESHOLD", cfg.get("CMASK_THRESHOLD"), 0, None)
         _check_range(errs, "CMASK_MAJORITY_THRESHOLD", cfg.get("CMASK_MAJORITY_THRESHOLD"), 0.0, 1.0)
         if "CMASK" not in feats:
-            errs.append("Il filtro CMASK richiede la feature CMASK nel dataset")
+            errs.append("The CMASK filter requires the CMASK feature in the dataset")
     if cfg.get("MULTI_CLASS"):
-        errs.append("MULTI_CLASS non è supportato dal training del pacchetto (binario YES/NO)")
+        errs.append("MULTI_CLASS is not supported by the package training (binary YES/NO)")
     return errs
 
 
@@ -231,20 +231,20 @@ def validate_model_config(cfg: dict, info: dict) -> list[str]:
     errs = []
     model = cfg.get("model")
     if model not in info.get("trainable_models", []):
-        return [f"Modello non disponibile nel pacchetto: {model}"]
+        return [f"Model not available in the package: {model}"]
     defaults = info["model_configs"].get(model, {})
     for k, v in (cfg.get("model_params") or {}).items():
         d = defaults.get(k)
         if d is None or v is None:
             continue
         if isinstance(d, bool) and not isinstance(v, bool):
-            errs.append(f"{k}: atteso booleano")
+            errs.append(f"{k}: boolean expected")
         elif isinstance(d, int) and not isinstance(d, bool) and (not isinstance(v, int) or isinstance(v, bool)):
-            errs.append(f"{k}: atteso intero")
+            errs.append(f"{k}: integer expected")
         elif isinstance(d, float) and not isinstance(v, (int, float)):
-            errs.append(f"{k}: atteso numero")
+            errs.append(f"{k}: number expected")
         elif isinstance(v, (int, float)) and not isinstance(v, bool) and v < 0:
-            errs.append(f"{k}: deve essere ≥ 0")
+            errs.append(f"{k}: must be ≥ 0")
     t = cfg.get("training_config") or {}
     _check_range(errs, "batch_size", t.get("batch_size"), 1, 65536, integer=True)
     _check_range(errs, "learning_rate", t.get("learning_rate"), 1e-9, 10)
@@ -253,30 +253,30 @@ def validate_model_config(cfg: dict, info: dict) -> list[str]:
     _check_range(errs, "patience", t.get("patience"), 1, 10000, integer=True)
     sch = (t.get("lr_scheduler") or {}).get("type")
     if sch not in SCHEDULERS:
-        errs.append(f"lr_scheduler.type: uno tra {SCHEDULERS}")
+        errs.append(f"lr_scheduler.type: one of {SCHEDULERS}")
     if sch == "ReduceLROnPlateau":
         for k in ("mode", "factor", "patience", "min_lr"):
             if k not in t["lr_scheduler"]:
-                errs.append(f"ReduceLROnPlateau richiede '{k}'")
+                errs.append(f"ReduceLROnPlateau requires '{k}'")
     th = t.get("threshold_optimization") or {}
     if th.get("enabled") and th.get("metric") not in THRESHOLD_METRICS:
-        errs.append(f"threshold_optimization.metric: uno tra {THRESHOLD_METRICS}")
+        errs.append(f"threshold_optimization.metric: one of {THRESHOLD_METRICS}")
     es = t.get("early_stopping") or {}
     if es and es.get("monitor") not in MONITORS:
-        errs.append(f"early_stopping.monitor: uno tra {MONITORS}")
+        errs.append(f"early_stopping.monitor: one of {MONITORS}")
     if es and es.get("mode") not in ("min", "max"):
-        errs.append("early_stopping.mode: 'min' o 'max'")
+        errs.append("early_stopping.mode: 'min' or 'max'")
     if es.get("monitor") == "val_loss" and es.get("mode") == "max":
-        errs.append("early_stopping: con monitor 'val_loss' il mode deve essere 'min'")
+        errs.append("early_stopping: with monitor 'val_loss' the mode must be 'min'")
     if (t.get("loss_function") or {}).get("type") not in LOSS_TYPES:
-        errs.append(f"loss_function.type: uno tra {LOSS_TYPES}")
+        errs.append(f"loss_function.type: one of {LOSS_TYPES}")
     cal = t.get("calibration") or {}
     if cal.get("enabled") and cal.get("type", "platt") not in CALIBRATION_TYPES:
-        errs.append(f"calibration.type: uno tra {CALIBRATION_TYPES}")
+        errs.append(f"calibration.type: one of {CALIBRATION_TYPES}")
     reg = cfg.get("regularization_params")
     if model in info.get("sk_models", []):
         if not reg or any((not isinstance(x, (int, float))) or x <= 0 for x in reg):
-            errs.append("regularization_params: lista di valori > 0 (griglia esplorata in CV)")
+            errs.append("regularization_params: list of values > 0 (grid explored in CV)")
     _check_range(errs, "seed", cfg.get("seed"), 0, 2**32 - 1, integer=True)
     return errs
 
@@ -287,25 +287,25 @@ def validate_training(cfg: dict, split: dict, model_cfg: dict, info: dict) -> li
     ws = cfg.get("windows") or []
     wm = cfg.get("window_map") or {}
     if not ws:
-        errs.append("Seleziona almeno una finestra temporale")
+        errs.append("Select at least one time window")
     for w in ws:
         steps = wm.get(w)
         if not isinstance(steps, int) or steps < 1:
-            errs.append(f"Finestra {w}: numero di step non valido")
+            errs.append(f"Window {w}: invalid number of steps")
         elif steps > split["summary"]["timesteps"]:
-            errs.append(f"Finestra {w} ({steps} step) più lunga dei TIMESTEPS dello split ({split['summary']['timesteps']})")
+            errs.append(f"Window {w} ({steps} steps) longer than the split TIMESTEPS ({split['summary']['timesteps']})")
     nf = split["summary"]["leakage"]["n_folds"]
     _check_range(errs, "n_folds", cfg.get("n_folds"), 1, nf, integer=True)
     if cfg.get("device") not in ("auto", "cpu", "cuda"):
-        errs.append("device: auto, cpu o cuda")
+        errs.append("device: auto, cpu or cuda")
     if model in info.get("gpu_only_models", []) and not info.get("cuda_available"):
-        errs.append(f"{model} usa cupy e richiede una GPU CUDA, non disponibile su questa macchina")
+        errs.append(f"{model} uses cupy and requires a CUDA GPU, not available on this machine")
     if cfg.get("device") == "cuda" and not info.get("cuda_available"):
-        errs.append("CUDA non disponibile su questa macchina")
+        errs.append("CUDA not available on this machine")
     lk = split["summary"]["leakage"]
     if lk["test_vs_trainval_shared_harps"] or lk["test_vs_trainval_shared_samples"]:
-        errs.append(f"Lo split condivide Active Region/campioni tra test e train/val ({lk}): "
-                    "rischio di data leakage, crea uno split con separazione per HARP")
+        errs.append(f"The split shares Active Regions/samples between test and train/val ({lk}): "
+                    "risk of data leakage, create a split separated by HARP")
     return errs
 
 
@@ -314,11 +314,11 @@ def validate_inference(cfg: dict, training: dict, source: dict) -> list[str]:
     tw = training["summary"]["windows"]
     for w in cfg.get("windows") or []:
         if w not in tw:
-            errs.append(f"La finestra {w} non è stata addestrata (disponibili: {list(tw)})")
+            errs.append(f"Window {w} was not trained (available: {list(tw)})")
     if not cfg.get("windows"):
-        errs.append("Seleziona almeno una finestra")
+        errs.append("Select at least one window")
     if cfg.get("threshold_mode") not in ("cv", "fixed"):
-        errs.append("threshold_mode: 'cv' o 'fixed'")
+        errs.append("threshold_mode: 'cv' or 'fixed'")
     if cfg.get("threshold_mode") == "fixed":
         _check_range(errs, "threshold", cfg.get("threshold"), 0.0, 1.0)
     if cfg.get("model_choice") == "fold":
@@ -326,10 +326,10 @@ def validate_inference(cfg: dict, training: dict, source: dict) -> list[str]:
     if source["type"] == "split":
         names = list(source["summary"]["files"])
         if cfg.get("source_file", "test") not in names:
-            errs.append(f"File di split sconosciuto: {cfg.get('source_file')} (disponibili {names})")
+            errs.append(f"Unknown split file: {cfg.get('source_file')} (available {names})")
         elif cfg.get("source_file", "test") != "test" and source["id"] == training["parents"]["split"]:
-            errs.append("Stai usando dati di train/validation dello stesso split del modello: "
-                        "non sono eventi non visti (data leakage)")
+            errs.append("You are using train/validation data from the same split as the model: "
+                        "these are not unseen events (data leakage)")
     try:
         _date(cfg.get("time_start"), "time_start")
         _date(cfg.get("time_end"), "time_end")
@@ -361,7 +361,7 @@ class Pipeline:
 
     def _raise(self, errs):
         if errs:
-            raise StoreError("Parametri non validi:\n- " + "\n- ".join(errs))
+            raise StoreError("Invalid parameters:\n- " + "\n- ".join(errs))
 
     def create_labels(self, name, config, description="", derived_from=None):
         self._raise(validate_labels(config, self.settings))
@@ -402,7 +402,7 @@ class Pipeline:
         m = self.store.get(artifact_id)
         cfg = copy.deepcopy(config if config is not None else m["config"])
         par = dict(parents if parents is not None else m["parents"])
-        name = name or f"{m['name']} (variante)"
+        name = name or f"{m['name']} (variant)"
         kind = m["type"]
         creators = {
             "labels": lambda: self.create_labels(name, cfg, description, artifact_id),
@@ -416,8 +416,8 @@ class Pipeline:
 
     def reproduce_step(self, artifact_id: str) -> dict:
         m = self.store.get(artifact_id)
-        return self.variant(artifact_id, name=f"{m['name']} (riproduzione)",
-                            description=f"Riproduzione di {artifact_id} con configurazione e input salvati")
+        return self.variant(artifact_id, name=f"{m['name']} (reproduction)",
+                            description=f"Reproduction of {artifact_id} with the saved configuration and inputs")
 
     def reproduce_chain(self, artifact_id: str) -> list[str]:
         """Re-create the whole chain (ancestors + artifact) as *new* artifacts, wired to each other.
@@ -428,10 +428,10 @@ class Pipeline:
         for old in order:
             m = self.store.get(old)
             parents = {r: mapping.get(p, p) for r, p in m["parents"].items()}
-            new = self.store.create(m["type"], f"{m['name']} (riproduzione catena)", copy.deepcopy(m["config"]),
+            new = self.store.create(m["type"], f"{m['name']} (chain reproduction)", copy.deepcopy(m["config"]),
                                     parents=parents, derived_from=old, mode=self.settings.mode,
                                     status="completed" if m["type"] == "model_config" else "pending",
-                                    description=f"Riproduzione della catena di {artifact_id}")
+                                    description=f"Reproduction of the chain of {artifact_id}")
             mapping[old] = new["id"]
             if m["type"] != "model_config":
                 runnable.append(new["id"])
@@ -451,7 +451,7 @@ class Pipeline:
         rows = []
         for k in sorted(set(fa) | set(fb)):
             if fa.get(k) != fb.get(k):
-                rows.append({"chiave": k, a: fa.get(k, "—"), b: fb.get(k, "—")})
+                rows.append({"key": k, a: fa.get(k, "—"), b: fb.get(k, "—")})
         return rows
 
     def export(self, artifact_id: str) -> dict:
@@ -478,7 +478,7 @@ class Pipeline:
                 if pid in ids:
                     lines.append(f'"{pid}" -> "{aid}" [label="{role}", fontsize=8];')
             if m.get("derived_from") in ids:
-                lines.append(f'"{m["derived_from"]}" -> "{aid}" [style=dashed, color="#888888", label="variante"];')
+                lines.append(f'"{m["derived_from"]}" -> "{aid}" [style=dashed, color="#888888", label="variant"];')
         lines.append("}")
         return "\n".join(lines)
 

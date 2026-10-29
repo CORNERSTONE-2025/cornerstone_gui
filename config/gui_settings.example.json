@@ -1,5 +1,5 @@
 {
-  "cornerstone_root": "/bigdisk/daniele/cornerstone_module",
+  "cornerstone_root": "../cornerstone_db_package",
   "cornerstone_python": "",
   "db_path": "",
   "workspace": "workspace",

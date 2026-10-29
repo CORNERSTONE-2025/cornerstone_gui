@@ -1,0 +1,10 @@
+# kept: .git (the image records the GUI commit in every artifact's provenance)
+.venv/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+gui_settings.json
+workspace/
+workspace_demo/
+data/
+.env

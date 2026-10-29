@@ -1,112 +1,113 @@
-# Analisi del pacchetto e architettura della GUI
+# Package analysis and GUI architecture
 
-## 1. Analisi del repository CORNERSTONE (`cornerstone_db_package`)
+## 1. Analysis of the CORNERSTONE repository (`cornerstone_db_package`)
 
-Analisi fatta sul commit `897a662` (branch `main` di CORNERSTONE-2025). La GUI non modifica il pacchetto.
+Analysis made on commit `897a662` (branch `main` of CORNERSTONE-2025). The GUI does not modify the package.
 
-### API pubblica (`cornerstone.Cornerstone`)
+### Public API (`cornerstone.Cornerstone`)
 
-| Metodo | Cosa fa | Input → output |
+| Method | What it does | Input → output |
 |---|---|---|
-| `db_update()` | Sincronizza il DB locale con dump remoti su Google Drive | rete → SQLite locale |
-| `splitting_labeling(shtyp, class0, delta_hours, db_type, save_csv)` | Label per (t_X, HARP) contando i flare GOES prima/dopo t_X | tabelle `SHARPC_all_*`, `NOAA_SHARPC_*_AR` → tabella `DF_<shtyp>_<class0>_delta<h>_three_classes` (**append** nel DB) |
-| `create_hdf5_from_db(label_type, data_version, table_type, window_hours, buffer_minutes, sampling_interval, test_mode, test_size, random_seed, db_type)` | Serie temporali SHARP nelle `window_hours` precedenti ogni t_X | label + `SHARPC_<version>_<type>` → HDF5 + `missing_data_log.csv` |
-| `create_dataset_splits(config)` | Selezione feature, filtri sui mancanti/temporali/CMASK, split random o cronologico con k-fold raggruppato per HARP | HDF5 → `splits/*_cv_k_{train,val}.h5`, `*_test.h5`, grafici, config |
-| `train_models(train_config_path)` | Cross-validation per ogni finestra (3h/6h/12h/24h) | split + JSON → modelli per fold, metriche JSON, grafici |
-| `test_model(test_config_path)` | Valutazione del modello `_best` sul test set | modelli → metriche (solo log ClearML) |
+| `db_update()` | Syncs the local DB with remote dumps on Google Drive | network → local SQLite |
+| `splitting_labeling(shtyp, class0, delta_hours, db_type, save_csv)` | Labels per (t_X, HARP) counting GOES flares before/after t_X | tables `SHARPC_all_*`, `NOAA_SHARPC_*_AR` → table `DF_<shtyp>_<class0>_delta<h>_three_classes` (**appended** to the DB) |
+| `create_hdf5_from_db(label_type, data_version, table_type, window_hours, buffer_minutes, sampling_interval, test_mode, test_size, random_seed, db_type)` | SHARP time series in the `window_hours` before every t_X | labels + `SHARPC_<version>_<type>` → HDF5 + `missing_data_log.csv` |
+| `create_dataset_splits(config)` | Feature selection, missing-data/time/CMASK filters, random or chronological split with k-fold grouped by HARP | HDF5 → `splits/*_cv_k_{train,val}.h5`, `*_test.h5`, plots, config |
+| `train_models(train_config_path)` | Cross-validation for every window (3h/6h/12h/24h) | split + JSON → per-fold models, JSON metrics, plots |
+| `test_model(test_config_path)` | Evaluation of the `_best` model on the test set | models → metrics (ClearML log only) |
 
-### Dati (SQLite)
+### Data (SQLite)
 
-- `SHARPC_clean_{DEF,NRT}` (17 feature normalizzate `_N1/_N2`) e `SHARPC_all_{DEF,NRT}` (22 feature): cadenza 12 min.
-- `NOAA_SHARPC_{DEF,NRT}_AR`: flare GOES XRA associati alle HARP (`fflux` in W/m², `part1` = classe).
-- `DF_*_three_classes`: label `YES`/`NO1..NO4`, `label_u` = classe del flare (C/M/X).
-- **CME: nessuna tabella.** Il pacchetto tratta solo flare; la GUI lo dichiara e non simula dati CME.
+- `SHARPC_clean_{DEF,NRT}` (17 normalized features `_N1/_N2`) and `SHARPC_all_{DEF,NRT}` (22 features): 12 min cadence.
+- `NOAA_SHARPC_{DEF,NRT}_AR`: GOES XRA flares associated with the HARPs (`fflux` in W/m², `part1` = class).
+- `DF_*_three_classes`: labels `YES`/`NO1..NO4`, `label_u` = flare class (C/M/X).
+- **CME: no table.** The package only handles flares; the GUI states it and does not simulate CME data.
 
-### Modelli (`cornerstone.ml`)
+### Models (`cornerstone.ml`)
 
-- PyTorch (`PT_MODELS`): LSTM, TRANSFORMER, INCEPTIONTIME, ONEFITSALL e i modelli della Time-Series-Library
+- PyTorch (`PT_MODELS`): LSTM, TRANSFORMER, INCEPTIONTIME, ONEFITSALL and the Time-Series-Library models
   (Autoformer, DLinear, FEDformer, LightTS, Nonstationary_Transformer, Pyraformer, Reformer, TimesNet, Informer).
-- sklearn-like (`SK_MODELS`): XGBOOST, ROCKET, MINIROCKET (questi ultimi due usano **cupy → GPU obbligatoria**).
-- Iperparametri: `cornerstone/ml/model_configs.py`; griglia di regolarizzazione SK: `regularization_configs.py`.
-- Training PT: loss bce/focal/asymmetric_focal/curriculum, scheduler Cosine/Plateau, early stopping su
-  tss/val_loss/auc/f1/mcc/hss, ottimizzazione della soglia su validation, calibrazione Platt/temperature opzionale.
-- Training SK: griglia C × fold, C scelto per TSS medio di validation, soglia ottimizzata su validation (`model.threshold_`).
-- Metriche (`metrics.compute_metrics`): F1, AUC, MCC, TSS (= TPR − FPR), HSS, matrice di confusione.
+- sklearn-like (`SK_MODELS`): XGBOOST, ROCKET, MINIROCKET (the last two use **cupy → GPU required**).
+- Hyperparameters: `cornerstone/ml/model_configs.py`; SK regularization grid: `regularization_configs.py`.
+- PT training: bce/focal/asymmetric_focal/curriculum loss, Cosine/Plateau scheduler, early stopping on
+  tss/val_loss/auc/f1/mcc/hss, threshold optimization on validation, optional Platt/temperature calibration.
+- SK training: C grid × folds, C chosen by mean validation TSS, threshold optimized on validation (`model.threshold_`).
+- Metrics (`metrics.compute_metrics`): F1, AUC, MCC, TSS (= TPR − FPR), HSS, confusion matrix.
 
-### Lacune individuate e come la GUI le gestisce
+### Gaps found and how the GUI handles them
 
-| Lacuna | Gestione |
+| Gap | Handling |
 |---|---|
-| `splitting_labeling` scrive in **append** nel DB condiviso (ri-eseguire duplica le righe) e un CSV nella cwd | Labeling su un **DB privato dell'artefatto** (adattatore, §3) |
-| `create_hdf5_from_db` legge label e feature dallo stesso DB | DB principale aperto **read-only** + label dell'artefatto montate come vista temporanea |
-| Gli override `MODEL_CONFIG_OVERRIDES` del JSON vengono sovrascritti da `MODEL_CONFIGS` in `ModelManager.create_model` | Il runner aggiorna `MODEL_CONFIGS` nel proprio processo |
-| `train_models` richiede che il dataset sia registrato in `AVAILABLE_DATASETS` | Il runner registra lo split dell'artefatto |
-| Nessun seed impostato nel training | Il runner imposta seed python/numpy/torch (registrato nella config) |
-| Per i modelli PyTorch non viene salvato `*_best.pt` richiesto da `run_test` | Copia del fold `best_fold` scelto dal pacchetto (registrata nel manifest) |
-| `run_test`: soglia fissa 0.5 per PT, valore di ritorno corrotto (riassegna `test_metrics` nel ciclo), nessuna predizione per campione | Inferenza della GUI costruita con i mattoni del pacchetto (`FlareHDF5Dataset`, `ModelManager`, `collect_logits`, `compute_metrics`), soglia esplicita, predizioni salvate |
-| Chiave `calibration.kind` in `train_config.json` ignorata (il codice legge `type`) | La GUI scrive `type` e lo segnala |
-| Range di date del labeling fisso (1996–2025) | Documentato; non modificabile senza cambiare il pacchetto |
-| CME assenti | Dichiarato in GUI; nessuna simulazione |
+| `splitting_labeling` **appends** to the shared DB (re-running duplicates the rows) and writes a CSV in the cwd | Labeling on a **private DB of the artifact** (adapter, §3) |
+| `create_hdf5_from_db` reads labels and features from the same DB | Main DB opened **read-only** + artifact labels mounted as a temporary view |
+| The JSON `MODEL_CONFIG_OVERRIDES` are overwritten by `MODEL_CONFIGS` in `ModelManager.create_model` | The runner updates `MODEL_CONFIGS` in its own process |
+| `train_models` requires the dataset to be registered in `AVAILABLE_DATASETS` | The runner registers the artifact split |
+| No seed set during training | The runner sets the python/numpy/torch seeds (recorded in the config) |
+| PyTorch models: the `*_best.pt` required by `run_test` is never saved | Copy of the `best_fold` chosen by the package (recorded in the manifest) |
+| `run_test`: fixed 0.5 threshold for PT, corrupted return value (reassigns `test_metrics` in the loop), no per-sample predictions | GUI inference built from the package building blocks (`FlareHDF5Dataset`, `ModelManager`, `collect_logits`, `compute_metrics`), explicit threshold, saved predictions |
+| `calibration.kind` key in `train_config.json` ignored (the code reads `type`) | The GUI writes `type` and points it out |
+| Fixed labeling date range (1996–2025) | Documented; cannot be changed without changing the package |
+| No CME data | Stated in the GUI; nothing simulated |
 
-## 2. Architettura
+## 2. Architecture
 
 ```
-┌────────────── Streamlit (venv GUI: streamlit, plotly, pandas, h5py, sklearn) ──────────────┐
-│ app/pages/*.py  ── cs_gui.ui (componenti) ── cs_gui.pipeline (validazione, varianti,       │
-│                                               riproduzione) ── cs_gui.store (artefatti)     │
-│                                               cs_gui.jobs (processi in background)          │
-│                                               cs_gui.db (SQLite read-only), metrics, h5info │
+┌──────────── Streamlit (GUI environment: streamlit, plotly, pandas, h5py, sklearn) ─────────┐
+│ app/pages/*.py  ── cs_gui.ui (components) ── cs_gui.pipeline (validation, variants,        │
+│                                               reproduction) ── cs_gui.store (artifacts)     │
+│                                               cs_gui.jobs (background processes)            │
+│                                               cs_gui.db (read-only SQLite), metrics, h5info │
 └──────────────────────────────────┬─────────────────────────────────────────────────────────┘
-                                   │ subprocess (process group dedicato, log su file)
-┌──────────────────────────────────▼──────── venv CORNERSTONE (torch, xgboost, cupy, …) ─────┐
-│ python -m cs_gui.runner  ── steps.py (un passo per tipo di artefatto)                       │
-│                          ── adapters.py (integrazione senza modificare il pacchetto)        │
-│                          ── cornerstone.Cornerstone / cornerstone.ml.*                      │
+                                   │ subprocess (own process group, log to file)
+┌──────────────────────────────────▼──────── CORNERSTONE environment (torch, xgboost, …) ────┐
+│ python -m cs_gui.runner  ── steps.py (one step per artifact type)                          │
+│                          ── adapters.py (integration without modifying the package)        │
+│                          ── cornerstone.Cornerstone / cornerstone.ml.*                     │
 └────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Scelte:
-- **Streamlit**: Python puro, compatibile con lo stack scientifico, form dinamici e grafici Plotly
-  interattivi; le operazioni lunghe non bloccano l'interfaccia perché girano in sottoprocessi.
-- **Due virtualenv**: la GUI resta leggera; il runner usa l'ambiente esatto del pacchetto (stesse versioni
-  di torch/cupy/xgboost usate in ricerca).
-- **Stato su disco** (manifest JSON per artefatto + record dei job): sopravvive al riavvio della GUI; un job
-  morto senza aggiornare lo stato viene marcato `failed` al successivo accesso (`JobManager.reconcile`).
-- **ClearML offline**: il runner forza `CLEARML_OFFLINE_MODE=1` per non pubblicare esecuzioni dalla GUI.
+Choices:
+- **Streamlit**: pure Python, compatible with the scientific stack, dynamic forms and interactive Plotly
+  plots; long operations do not block the interface because they run in subprocesses.
+- **Two environments (local install)**: the GUI stays light; the runner uses the exact environment of the
+  package (same torch/cupy/xgboost versions used in research). In the **Docker image** a single environment
+  contains both (see [DOCKER.md](DOCKER.md)).
+- **State on disk** (JSON manifest per artifact + job records): it survives GUI restarts; a job that died
+  without updating its state is marked `failed` at the next access (`JobManager.reconcile`).
+- **ClearML offline**: the runner forces `CLEARML_OFFLINE_MODE=1` so that runs from the GUI are never published.
 
-## 3. Adattatori (`cs_gui/runner/adapters.py`)
+## 3. Adapters (`cs_gui/runner/adapters.py`)
 
-1. `readonly_sqlite_module`: sostituisce `cornerstone.cornerstone.sqlite3` nel processo runner. Il DB principale
-   si apre con `mode=ro` (scritture impossibili); il DB delle label dell'artefatto viene `ATTACH`-ato e una
-   `TEMP VIEW` col nome atteso dal pacchetto ha la precedenza sulla tabella omonima del DB principale.
-2. `build_labeling_db`: DB privato con `NOAA_SHARPC_<t>_AR` copiata e, per `SHARPC_all_<t>`, solo il primo e
-   l'ultimo `T_OBS` di ogni HARP. La query usata da `splitting_labeling`
-   (`SELECT HARPNUM, MIN(T_OBS), MAX(T_OBS) … GROUP BY HARPNUM`) dà lo stesso risultato (test automatico).
-3. `apply_model_overrides`, `register_dataset`, `set_device`, `set_seeds`: configurazione in-process.
-4. `make_best_pt_models`: copia `*_fold{best_fold}.pt` → `*_best.pt`.
+1. `readonly_sqlite_module`: replaces `cornerstone.cornerstone.sqlite3` in the runner process. The main DB
+   is opened with `mode=ro` (writes are impossible); the artifact labels DB is `ATTACH`ed and a
+   `TEMP VIEW` with the name expected by the package takes precedence over the table of the same name in the main DB.
+2. `build_labeling_db`: private DB with a copy of `NOAA_SHARPC_<t>_AR` and, for `SHARPC_all_<t>`, only the first
+   and last `T_OBS` of every HARP. The query used by `splitting_labeling`
+   (`SELECT HARPNUM, MIN(T_OBS), MAX(T_OBS) … GROUP BY HARPNUM`) gives the same result (automated test).
+3. `apply_model_overrides`, `register_dataset`, `set_device`, `set_seeds`: in-process configuration.
+4. `make_best_pt_models`: copies `*_fold{best_fold}.pt` → `*_best.pt`.
 
-## 4. Data leakage: regole applicate
+## 4. Data leakage: rules applied
 
-- Split: si usano solo le strategie del pacchetto, entrambe raggruppate per HARP; la GUI verifica dopo lo split
-  che test e train/val non condividano HARP né campioni (`summary.leakage`) e **blocca il training** se succede.
-- Il preprocessing del pacchetto è per campione (selezione/filtri, nessuna normalizzazione appresa sui dati),
-  quindi non c'è fit di trasformazioni su dati di test.
-- Inferenza: ogni predizione è marcata se la sua HARP compare in train/val del modello; per default queste
-  righe sono **escluse dalle metriche**. Usare train/val dello stesso split come "eventi non visti" è vietato
-  dalla validazione.
-- Split casuale: test e training non sono separati nel tempo. La GUI lo segnala e suggerisce lo split cronologico
-  (cutoff o finestra) per una valutazione operativa.
+- Split: only the package strategies are used, both grouped by HARP; after the split the GUI checks
+  that test and train/val share neither HARPs nor samples (`summary.leakage`) and **blocks training** if they do.
+- The package preprocessing is per sample (selection/filters, no normalization learned from the data),
+  so no transformation is fitted on test data.
+- Inference: every prediction is flagged if its HARP appears in the model train/val; by default these
+  rows are **excluded from the metrics**. Using train/val of the same split as "unseen events" is rejected
+  by the validation.
+- Random split: test and training are not separated in time. The GUI points it out and suggests the
+  chronological split (cutoff or window) for an operational evaluation.
 
-## 5. Limitazioni residue
+## 5. Remaining limitations
 
-- ROCKET/MINIROCKET richiedono GPU CUDA (cupy): su macchine senza GPU la GUI li blocca prima del training.
-- Riproducibilità bit-a-bit non garantita: operazioni non deterministiche di PyTorch, thread multipli,
-  versioni diverse delle dipendenze. La GUI registra commit del pacchetto (con flag "modifiche locali"),
-  versioni e seed, e avvisa se il pacchetto è cambiato rispetto all'esecuzione originale.
-- Il labeling generato copre sempre 1996-01-01 → 2025-04-30 (fissato nel pacchetto) e può richiedere
-  decine di minuti.
-- Le metriche "test_*" mostrate nel training sono quelle che il pacchetto calcola per fold; la valutazione di
-  riferimento è quella dell'artefatto di inferenza.
-- Le predizioni dei modelli PyTorch usano probabilità sigmoid **non calibrate** (come `run_test`); la soglia CV
-  usata è la `best_threshold` del fold, ottimizzata sulle stesse probabilità non calibrate.
-- `db_update()` (sincronizzazione da Google Drive) non è esposto: modifica il DB condiviso e richiede rete.
+- ROCKET/MINIROCKET require a CUDA GPU (cupy): on machines without a GPU the GUI blocks them before training.
+- Bit-for-bit reproducibility is not guaranteed: non-deterministic PyTorch operations, multiple threads,
+  different dependency versions. The GUI records the package commit (with a "local changes" flag),
+  versions and seeds, and warns if the package changed since the original run.
+- Generated labeling always covers 1996-01-01 → 2025-04-30 (fixed in the package) and can take
+  tens of minutes.
+- The "test_*" metrics shown in training are those the package computes per fold; the reference
+  evaluation is the one of the inference artifact.
+- Predictions of PyTorch models use **uncalibrated** sigmoid probabilities (like `run_test`); the CV threshold
+  used is the fold `best_threshold`, optimized on the same uncalibrated probabilities.
+- `db_update()` (sync from Google Drive) is not exposed: it modifies the shared DB and needs the network.

@@ -1,0 +1,5 @@
+# GUI dependencies added on top of requirements-cornerstone.txt (numpy, pandas, h5py and
+# scikit-learn come from there, so the GUI and the package share the same versions).
+streamlit==1.65.0
+plotly==7.1.0
+pytest==8.4.2

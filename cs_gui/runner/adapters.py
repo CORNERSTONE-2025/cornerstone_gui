@@ -66,7 +66,7 @@ def build_labeling_db(main_db: str, labels_db: str, shtyp: str) -> dict:
         sharp = f"SHARPC_all_{shtyp}"
         cols = src.execute(f"SELECT sql FROM sqlite_master WHERE name=?", (noaa,)).fetchone()
         if cols is None:
-            raise RuntimeError(f"Tabella eventi '{noaa}' assente nel database")
+            raise RuntimeError(f"Event table '{noaa}' missing from the database")
         dst.execute(cols[0])
         rows = src.execute(f'SELECT * FROM "{noaa}"').fetchall()
         if rows:
@@ -89,7 +89,7 @@ def snapshot_label_table(main_db: str, labels_db: str, table: str) -> int:
     try:
         ddl = src.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()
         if ddl is None:
-            raise RuntimeError(f"Tabella di label '{table}' non presente nel database")
+            raise RuntimeError(f"Label table '{table}' not found in the database")
         dst.execute(ddl[0])
         rows = src.execute(f'SELECT * FROM "{table}"').fetchall()
         if rows:
@@ -140,7 +140,7 @@ def set_device(device: str) -> str:
     if device == "auto":
         device = "cuda" if torch.cuda.is_available() else "cpu"
     if device == "cuda" and not torch.cuda.is_available():
-        raise RuntimeError("CUDA richiesto ma non disponibile su questa macchina")
+        raise RuntimeError("CUDA requested but not available on this machine")
     cfg.DEVICE_CONFIG["device"] = device
     return device
 
