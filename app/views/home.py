@@ -77,6 +77,12 @@ with d:
     st.markdown(f"Free space: **{free:.1f} GB** (minimum to start a job: {s.min_free_disk_gb} GB)")
 
 st.divider()
+st.subheader("Real database")
+st.caption("Downloaded from the CORNERSTONE Google Drive with `Cornerstone.db_update()`: the first time "
+           "the full dump, then only the incremental updates.")
+ui.db_download_panel()
+
+st.divider()
 with st.expander("⚙️ GUI configuration", expanded=bool(s.problems())):
     overridden = [env for env in _ENV if os.environ.get(env)]
     if overridden:

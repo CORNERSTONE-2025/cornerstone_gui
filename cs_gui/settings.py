@@ -64,12 +64,15 @@ class Settings:
         return Path(self.demo_workspace) / "demo_cornerstone.sqlite"
 
     @property
+    def real_db_path(self) -> str:
+        """The real database, whatever the mode (it is where the database download writes)."""
+        return self.db_path or _db_path_from_cornerstone(self.cornerstone_root)
+
+    @property
     def active_db_path(self) -> str:
         if self.mode == "demo":
             return str(self.demo_db_path)
-        if self.db_path:
-            return self.db_path
-        return _db_path_from_cornerstone(self.cornerstone_root)
+        return self.real_db_path
 
     def problems(self) -> list[str]:
         """Human readable list of configuration problems (empty if everything is in place)."""
@@ -81,17 +84,20 @@ class Settings:
             out.append(f"CORNERSTONE Python interpreter not found: '{self.python}'.")
         db = self.active_db_path
         if not db or not Path(db).exists():
-            hint = " Generate the demo DB from the Home page." if self.mode == "demo" else ""
+            hint = (" Generate the demo DB from the Home page." if self.mode == "demo"
+                    else " Download it from the Home page (Database section).")
             out.append(f"SQLite database not found: '{db}'.{hint}")
         return out
 
 
 def _db_path_from_cornerstone(root: str) -> str:
+    """``local_db_path`` of the package config; relative paths are relative to the package checkout."""
     cfg = Path(root) / "cornerstone" / "configs" / "db_config.json"
     try:
-        return json.loads(cfg.read_text())["local_db_path"]
+        path = json.loads(cfg.read_text())["local_db_path"]
     except (OSError, KeyError, json.JSONDecodeError):
-        return str(Path(root) / "db" / "cornerstone.sqlite")
+        path = "db/cornerstone.sqlite"
+    return str((Path(root) / Path(path).expanduser()).resolve())
 
 
 PATH_KEYS = ("cornerstone_root", "cornerstone_python", "db_path", "workspace", "demo_workspace")

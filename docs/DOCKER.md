@@ -8,7 +8,8 @@ CPU-only Python environment with all their dependencies. Nothing else needs to b
 - [Docker](https://docs.docker.com/get-docker/) with Compose v2 (`docker compose version`).
   Docker Desktop on Windows and macOS works too.
 - About 5 GB of free disk space for the image, plus space for your experiments.
-- Optional: the CORNERSTONE SQLite database (`cornerstone.sqlite`, about 4 GB) to work on real data.
+- About 7 GB more to download the CORNERSTONE database from the GUI (1.5 GB dump + 4.3 GB database),
+  or a copy of `cornerstone.sqlite` you already have.
 
 ## Quick start
 
@@ -25,17 +26,20 @@ automatically. Every page shows a banner, and the results have no scientific val
 
 ## Using the real database
 
-Put the database in the `data/` folder next to `docker-compose.yml`:
+### Downloading the database
 
-```
-cornerstone_gui/
-├── docker-compose.yml
-└── data/
-    └── cornerstone.sqlite
-```
+On the Home page, section **Real database**, click **Download the database**. The GUI runs the
+package's `Cornerstone.db_update()` in the background: it downloads the full dump from the CORNERSTONE
+Google Drive (1.5 GB), builds the SQLite database (4.3 GB) and applies the incremental updates. It takes a
+while; the log is shown live and the download can be cancelled. When it is done, click **Switch to Real
+mode**. Later, **Check for updates** downloads only the new incremental updates.
 
-The database is mounted **read-only**: the GUI never modifies it. If it lives elsewhere or has another
-name, create a `.env` file next to `docker-compose.yml`:
+The database is kept in the Docker volume `db` (mounted at `/data`): it survives `docker compose down`
+and image rebuilds, and is deleted only by `docker compose down -v`.
+
+### Using a database you already have
+
+Create a `.env` file next to `docker-compose.yml`:
 
 ```bash
 CORNERSTONE_DB_DIR=/path/to/folder
@@ -44,6 +48,10 @@ CORNERSTONE_DB_FILE=my_database.sqlite
 
 Then restart with `docker compose up -d` and choose **Real** mode in *Home → GUI configuration*
 (the container only starts in demo mode by itself on its first run without a database).
+
+The GUI opens the database **read-only**: only the download/update writes to that folder. To update a
+database of your own from the GUI, the folder must be writable by the container user (uid 1000, usually
+the first user of the computer).
 
 ## Day-to-day commands
 
@@ -72,7 +80,7 @@ docker compose cp gui:/workspace ./workspace_backup
 | Variable (in `.env`) | Default | Meaning |
 |---|---|---|
 | `CS_GUI_PORT` | `8501` | port on your computer |
-| `CORNERSTONE_DB_DIR` | `./data` | folder holding the database |
+| `CORNERSTONE_DB_DIR` | `db` (Docker volume) | folder holding the database |
 | `CORNERSTONE_DB_FILE` | `cornerstone.sqlite` | database file name |
 | `CORNERSTONE_REF` | `main` | branch, tag or commit of the CORNERSTONE package used at build time |
 
@@ -102,7 +110,7 @@ and browse to http://localhost:8501. Only remove `127.0.0.1:` from `docker-compo
 docker build -t cornerstone-gui .
 docker run -d --name cornerstone-gui -p 127.0.0.1:8501:8501 --shm-size 2g \
   -v cornerstone-workspace:/workspace \
-  -v /path/to/folder:/data:ro \
+  -v cornerstone-db:/data \
   cornerstone-gui
 ```
 

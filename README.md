@@ -10,7 +10,8 @@ on unseen events → metrics, comparison, Active Region history**
 Every step uses the real functions of the package and produces a **persistent, versioned artifact**
 (configuration, files, log, checksums, code versions), so experiments can be resumed, reproduced and compared.
 
-> The GUI modifies neither the package code nor the shared database (opened read-only).
+> The GUI never modifies the package code, and opens the database read-only. The only exception is the
+> database download (Home page), which creates or updates the database file through the package's `db_update()`.
 
 ## Quick start with Docker (recommended)
 
@@ -20,8 +21,9 @@ cd cornerstone_gui
 docker compose up --build -d          # then open http://localhost:8501
 ```
 
-Without a database the GUI starts in demo mode on synthetic data. To use real data, put the
-CORNERSTONE database in `data/cornerstone.sqlite` and choose *Real* mode on the Home page.
+Without a database the GUI starts in demo mode on synthetic data. To use real data, click
+*Download the database* on the Home page (about 7 GB of free space, it takes a while) and then
+*Switch to Real mode*. A database you already have can be used instead: see [docs/DOCKER.md](docs/DOCKER.md).
 All details: [docs/DOCKER.md](docs/DOCKER.md).
 
 ## Local installation (without Docker)
@@ -31,7 +33,7 @@ Requirements:
 - Linux, Python ≥ 3.10, [uv](https://docs.astral.sh/uv/).
 - A checkout of the CORNERSTONE package with a working environment (its `.venv` with torch,
   xgboost, h5py, clearml…; [docker/requirements-cornerstone.txt](docker/requirements-cornerstone.txt) lists
-  what it needs) and the local SQLite database.
+  what it needs). The SQLite database can be downloaded from the Home page.
 - No GPU is required: every model also runs on CPU. A GPU (NVIDIA CUDA, or AMD with a ROCm build of
   torch) speeds up the PyTorch models.
 
@@ -127,4 +129,5 @@ uv run pytest -m integration           # real package on the demo DB + all pages
 - The Docker image is CPU-only.
 - Bit-for-bit reproducibility is not guaranteed for PyTorch models; commit, versions and seeds are recorded.
 - Generated labeling covers the fixed range of the package (1996–2025) and is slow.
-- `db_update()` (download of the dumps from Google Drive) is not exposed in the GUI.
+- The database download relies on Google Drive (through `gdown`), which can refuse large automated
+  downloads for a while: if it fails, retry later.

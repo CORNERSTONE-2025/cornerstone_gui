@@ -4,9 +4,9 @@
 #   docker compose logs -f           # follow the logs
 #   docker compose down              # stop (the workspace volume is kept)
 #
-# Real data: put the CORNERSTONE SQLite database in ./data/cornerstone.sqlite, or set
-# CORNERSTONE_DB_DIR / CORNERSTONE_DB_FILE (e.g. in a .env file next to this one).
-# Without a database the GUI starts in demo mode on synthetic data.
+# Real data: download the database from the Home page (it is kept in the `db` volume), or use a
+# database you already have by setting CORNERSTONE_DB_DIR / CORNERSTONE_DB_FILE (e.g. in a .env
+# file next to this one). Without a database the GUI starts in demo mode on synthetic data.
 services:
   gui:
     build:
@@ -21,10 +21,13 @@ services:
       CS_GUI_DB_PATH: /data/${CORNERSTONE_DB_FILE:-cornerstone.sqlite}
     volumes:
       - workspace:/workspace
-      - ${CORNERSTONE_DB_DIR:-./data}:/data:ro
+      # a name (default `db`) is a Docker volume, a path is a folder of this computer. Writable:
+      # the database download writes there; the GUI itself opens the database read-only
+      - ${CORNERSTONE_DB_DIR:-db}:/data
     # PyTorch data loaders and the package multiprocessing pools use shared memory
     shm_size: "2gb"
     restart: unless-stopped
 
 volumes:
   workspace:
+  db:

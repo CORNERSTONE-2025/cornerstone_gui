@@ -81,7 +81,7 @@ for w, g in res.groupby("window"):
             if (others["TSS CI high"] >= best["TSS CI low"]).any():
                 overlap = " The confidence intervals overlap: the difference is not significant."
         msg = (f"Window **{w}**: same {len(next(iter(sets)))} samples for all models. Highest TSS: "
-               f"**{best['esperimento']}** ({best['TSS']:.3f}).{overlap}")
+               f"**{best['experiment']}** ({best['TSS']:.3f}).{overlap}")
         if issues:
             msg += " Note: " + "; ".join(issues) + "."
         st.success(msg)

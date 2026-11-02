@@ -8,9 +8,10 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from . import dbsync
 from .jobs import JobManager
 from .pipeline import Pipeline
-from .settings import Settings, load_settings
+from .settings import Settings, load_settings, save_settings
 from .store import ARTIFACT_TYPES, ArtifactStore, StoreError
 
 STATUS_STYLE = {"completed": ("green", "completed"), "failed": ("red", "failed"), "running": ("blue", "running"),
@@ -181,6 +182,50 @@ def job_monitor(types: list[str] | None = None) -> None:
                 st.rerun()
             with st.expander("Live log", expanded=m["status"] == "running"):
                 st.code(tail(c.store.log_path(m["id"]), 25), language="text")
+
+
+@st.fragment(run_every=3)
+def db_download_panel() -> None:
+    """Download / update of the real database (``Cornerstone.db_update``), auto-refresh every 3 s."""
+    c = ctx()
+    s = c.settings
+    stt = dbsync.status(s)
+    job = stt["job"] or {}
+    if stt["exists"]:
+        st.markdown(f"`{stt['db_path']}` · {stt['size_gb']:.1f} GB · synchronized to "
+                    f"**{stt['last_sync'] or 'unknown date'}**")
+    else:
+        st.markdown(f"Not downloaded yet: it will be saved to `{stt['db_path']}` "
+                    f"(about {dbsync.FULL_DOWNLOAD_GB:.0f} GB of free space needed).")
+    if stt["running"]:
+        st.info(f"Download/update running since {job['started_at'][:19].replace('T', ' ')}: the first "
+                "download takes a while (1.5 GB from Google Drive, then the 4 GB database is built).")
+        if st.button("Cancel the download", key="db_cancel"):
+            dbsync.cancel(s)
+            st.rerun()
+    else:
+        if job.get("status") == "completed":
+            st.success(f"Last download/update completed ({job.get('finished_at', '')[:19].replace('T', ' ')}).")
+        elif job.get("status") in ("failed", "cancelled"):
+            st.error(f"Last download/update {job['status']}: {job.get('error')}")
+        problems = dbsync.preflight(s)
+        if problems:
+            st.warning("\n\n".join(problems))
+        label = "Check for updates" if stt["exists"] else "Download the database"
+        if st.button(label, key="db_launch", disabled=bool(problems)):
+            try:
+                dbsync.launch(s)
+            except RuntimeError as e:
+                st.error(str(e))
+            st.rerun()
+        if stt["exists"] and s.mode == "demo" and st.button("Switch to Real mode", key="db_real"):
+            s.mode = "real"
+            save_settings(s)
+            reset_ctx()
+            st.rerun(scope="app")
+    if job.get("log"):
+        with st.expander("Download log", expanded=stt["running"]):
+            st.code(tail(Path(job["log"]), 25), language="text")
 
 
 def artifact_status_box(m: dict) -> None:

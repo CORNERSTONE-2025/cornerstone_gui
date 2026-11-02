@@ -4,7 +4,8 @@ Every option listed maps to a package feature (source in brackets).
 
 ## Home and status
 Workflow diagram, artifact counts by type and status, active jobs, environment status (package
-commit, CUDA, DB, disk space), path and mode configuration, demo DB generation.
+commit, CUDA, DB, disk space), real database download/update (`Cornerstone.db_update`, live log,
+cancel, switch to Real mode), path and mode configuration, demo DB generation.
 
 ## Labeling (`Cornerstone.splitting_labeling`)
 | Parameter | Values | Notes |

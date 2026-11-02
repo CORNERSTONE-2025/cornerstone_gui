@@ -63,6 +63,7 @@ Analysis made on commit `897a662` (branch `main` of CORNERSTONE-2025). The GUI d
                                    │ subprocess (own process group, log to file)
 ┌──────────────────────────────────▼──────── CORNERSTONE environment (torch, xgboost, …) ────┐
 │ python -m cs_gui.runner  ── steps.py (one step per artifact type)                          │
+│ python -m cs_gui.dbsync  ── Cornerstone.db_update() (database download/update)             │
 │                          ── adapters.py (integration without modifying the package)        │
 │                          ── cornerstone.Cornerstone / cornerstone.ml.*                     │
 └────────────────────────────────────────────────────────────────────────────────────────────┘
@@ -115,4 +116,6 @@ Choices:
   evaluation is the one of the inference artifact.
 - Predictions of PyTorch models use **uncalibrated** sigmoid probabilities (like `run_test`); the CV threshold
   used is the fold `best_threshold`, optimized on the same uncalibrated probabilities.
-- `db_update()` (sync from Google Drive) is not exposed: it modifies the shared DB and needs the network.
+- `db_update()` (Home → *Real database*) is the only operation that writes the database: it runs as its own
+  background process (`cs_gui.dbsync`), writes next to the configured real database and needs the network
+  (Google Drive through `gdown`).

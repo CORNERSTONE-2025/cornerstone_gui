@@ -35,7 +35,7 @@ ADD --keep-git-dir=true ${CORNERSTONE_REPO}#${CORNERSTONE_REF} /opt/cornerstone
 
 RUN useradd --create-home --uid 1000 cornerstone \
     && mkdir -p /workspace /data \
-    && chown cornerstone:cornerstone /workspace
+    && chown cornerstone:cornerstone /workspace /data
 
 WORKDIR /app
 COPY --chown=cornerstone:cornerstone . /app
