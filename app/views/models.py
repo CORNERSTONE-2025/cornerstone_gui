@@ -26,13 +26,8 @@ with tab_new:
                                  key="mc_base", allow_none=True)
     base = c.store.get(base_id)["config"] if base_id else None
     models = info["trainable_models"]
-    gpu = set(info["gpu_only_models"])
     model = st.selectbox("Algorithm", models, index=models.index(base["model"]) if base else models.index("LSTM"),
-                         format_func=lambda m: f"{m}  ({'sklearn' if m in info['sk_models'] else 'PyTorch'})"
-                                               + ("  — requires GPU" if m in gpu else ""), key=f"mc_model_{base_id}")
-    if model in gpu and not info["cuda_available"]:
-        st.warning(f"{model} uses cupy (CUDA GPU): the configuration can be saved but training will not start on "
-                   "this machine.")
+                         format_func=lambda m: f"{m}  ({'sklearn' if m in info['sk_models'] else 'PyTorch'})", key=f"mc_model_{base_id}")
     is_sk = model in info["sk_models"]
     k = f"{base_id}_{model}"           # widget keys reset when base/model change
     defaults = info["model_configs"].get(model, {})

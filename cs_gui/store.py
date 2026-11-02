@@ -73,7 +73,7 @@ def _atomic_write_json(path: Path, data: dict) -> None:
 
 class ArtifactStore:
     def __init__(self, workspace: str | Path):
-        self.workspace = Path(workspace)
+        self.workspace = Path(workspace).resolve()
         self.root = self.workspace / "artifacts"
         self.root.mkdir(parents=True, exist_ok=True)
 

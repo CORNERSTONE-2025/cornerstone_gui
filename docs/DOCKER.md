@@ -108,7 +108,6 @@ docker run -d --name cornerstone-gui -p 127.0.0.1:8501:8501 --shm-size 2g \
 
 ## Limitations of the image
 
-- CPU only: ROCKET and MINIROCKET need a CUDA GPU (cupy) and are blocked by the GUI. All other models,
-  including the PyTorch ones, run on CPU.
+- CPU only: all models, including ROCKET/MINIROCKET and the PyTorch ones, run on CPU.
 - PyTorch models train slowly on CPU: use the subsample option in *Dataset → HDF5 extraction* and few
   epochs for quick tests.

@@ -94,6 +94,8 @@ def _db_path_from_cornerstone(root: str) -> str:
         return str(Path(root) / "db" / "cornerstone.sqlite")
 
 
+PATH_KEYS = ("cornerstone_root", "cornerstone_python", "db_path", "workspace", "demo_workspace")
+
 _ENV = {
     "CS_GUI_CORNERSTONE_ROOT": "cornerstone_root",
     "CS_GUI_CORNERSTONE_PYTHON": "cornerstone_python",
@@ -113,6 +115,11 @@ def load_settings(path: Path | None = None) -> Settings:
         if os.environ.get(env):
             data[key] = os.environ[env]
     known = {k: v for k, v in data.items() if k in Settings.__dataclass_fields__}
+    # relative paths are relative to the project root: the runner works inside the workspace, so a
+    # relative path would point somewhere else there
+    for key in PATH_KEYS:
+        if known.get(key) and not Path(known[key]).is_absolute():
+            known[key] = str((PROJECT_ROOT / known[key]).resolve())
     s = Settings(**known)
     if s.mode not in ("real", "demo"):
         raise ValueError(f"Invalid mode: {s.mode!r} (expected 'real' or 'demo')")

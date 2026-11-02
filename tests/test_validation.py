@@ -7,7 +7,7 @@ from cs_gui.pipeline import (DEFAULT_TRAINING_CONFIG, validate_inference, valida
 DATASET = {"summary": {"feature_names": ["A", "B", "CMASK"], "timesteps": 121,
                        "time_start": "2012-01-01 00:00:00", "time_end": "2014-12-31 00:00:00"}}
 INFO = {"trainable_models": ["LSTM", "XGBOOST", "ROCKET"], "sk_models": ["XGBOOST", "ROCKET"],
-        "gpu_only_models": ["ROCKET"], "cuda_available": False,
+        "cuda_available": False,
         "model_configs": {"LSTM": {"input_dim": None, "model_dim": 128, "bidirectional": True, "dropout_prob": 0.3},
                           "XGBOOST": {"max_depth": 3}},
         "feature_groups": {"g": ["A", "ZZZ"]}}
@@ -56,6 +56,9 @@ def test_model_config_validation():
     assert any("boolean" in e for e in validate_model_config(mc_cfg(model_params={"bidirectional": 1}), INFO))
     assert any("regularization" in e for e in validate_model_config(mc_cfg(model="XGBOOST"), INFO))
     assert validate_model_config(mc_cfg(model="XGBOOST", regularization_params=[1.0, 10.0]), INFO) == []
+    upper = mc_cfg(model="XGBOOST", regularization_params=[1.0])
+    upper["training_config"]["early_stopping"] = {"monitor": "TSS", "mode": "max"}   # as in train_config.json
+    assert validate_model_config(upper, INFO) == []
     bad = mc_cfg()
     bad["training_config"]["early_stopping"] = {"monitor": "val_loss", "mode": "max"}
     assert any("val_loss" in e for e in validate_model_config(bad, INFO))
@@ -65,13 +68,21 @@ SPLIT = {"summary": {"timesteps": 61, "leakage": {"n_folds": 3, "test_vs_trainva
                                                   "test_vs_trainval_shared_samples": 0}}}
 
 
+def test_training_validation_single_class_fold():
+    ok = {"windows": ["12h"], "window_map": {"12h": 61}, "n_folds": 2, "device": "cpu"}
+    files = {"cv_0_train": {"n_samples": 100, "n_positive": 5}, "cv_0_val": {"n_samples": 25, "n_positive": 1},
+             "cv_1_train": {"n_samples": 100, "n_positive": 0}, "cv_1_val": {"n_samples": 25, "n_positive": 2}}
+    split = {"summary": {**SPLIT["summary"], "files": files}}
+    errs = validate_training(ok, split, {"config": {"model": "XGBOOST"}}, INFO)
+    assert len(errs) == 1 and "Fold 1 train" in errs[0]
+
+
 def test_training_validation():
     ok = {"windows": ["3h"], "window_map": {"3h": 16}, "n_folds": 3, "device": "auto"}
     assert validate_training(ok, SPLIT, {"config": {"model": "LSTM"}}, INFO) == []
     assert any("longer than" in e for e in validate_training({**ok, "windows": ["24h"], "window_map": {"24h": 121}},
                                                            SPLIT, {"config": {"model": "LSTM"}}, INFO))
     assert any("n_folds" in e for e in validate_training({**ok, "n_folds": 5}, SPLIT, {"config": {"model": "LSTM"}}, INFO))
-    assert any("GPU" in e for e in validate_training(ok, SPLIT, {"config": {"model": "ROCKET"}}, INFO))
     leaky = {"summary": {**SPLIT["summary"], "leakage": {**SPLIT["summary"]["leakage"], "test_vs_trainval_shared_harps": 2}}}
     assert any("leakage" in e for e in validate_training(ok, leaky, {"config": {"model": "LSTM"}}, INFO))
 

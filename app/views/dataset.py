@@ -188,6 +188,9 @@ with t_list:
             k[2].metric("Active Regions", s["n_active_regions"])
             k[3].metric("Positives", f"{100 * s['positive_rate']:.2f}%")
             k[4].metric("Excluded events (no data)", s.get("n_excluded_events", 0))
+            if s.get("n_positive", 1) == 0:
+                st.error("This dataset contains **no positive (YES) sample**: no model can be trained on it. "
+                         "Extract more events (no subsample or a larger one) or use a more frequent flare class.")
             st.markdown(f"Time range: **{s['time_start']} → {s['time_end']}** · timesteps {s['timesteps']}"
                         f" · label horizon Δ={s.get('label_horizon_hours')}h")
             c1, c2 = st.columns(2)

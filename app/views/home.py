@@ -54,8 +54,6 @@ with a:
                     + (" · :orange[uncommitted local changes]" if cs.get("dirty") else ""))
         st.markdown(f"CUDA available: **{'yes' if info['cuda_available'] else 'no'}** · "
                     f"trainable models: {len(info['trainable_models'])}")
-        if info["gpu_only_models"] and not info["cuda_available"]:
-            st.caption(f"Require a GPU (not usable here): {', '.join(info['gpu_only_models'])}")
         if st.button("Reload package features"):
             ui.package_info(refresh=True)
             st.rerun()

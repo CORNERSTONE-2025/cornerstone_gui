@@ -262,11 +262,12 @@ def validate_model_config(cfg: dict, info: dict) -> list[str]:
     if th.get("enabled") and th.get("metric") not in THRESHOLD_METRICS:
         errs.append(f"threshold_optimization.metric: one of {THRESHOLD_METRICS}")
     es = t.get("early_stopping") or {}
-    if es and es.get("monitor") not in MONITORS:
+    monitor = str(es.get("monitor")).lower()            # the package lower-cases it (training.train_model)
+    if es and monitor not in MONITORS:
         errs.append(f"early_stopping.monitor: one of {MONITORS}")
     if es and es.get("mode") not in ("min", "max"):
         errs.append("early_stopping.mode: 'min' or 'max'")
-    if es.get("monitor") == "val_loss" and es.get("mode") == "max":
+    if monitor == "val_loss" and es.get("mode") == "max":
         errs.append("early_stopping: with monitor 'val_loss' the mode must be 'min'")
     if (t.get("loss_function") or {}).get("type") not in LOSS_TYPES:
         errs.append(f"loss_function.type: one of {LOSS_TYPES}")
@@ -296,10 +297,16 @@ def validate_training(cfg: dict, split: dict, model_cfg: dict, info: dict) -> li
             errs.append(f"Window {w} ({steps} steps) longer than the split TIMESTEPS ({split['summary']['timesteps']})")
     nf = split["summary"]["leakage"]["n_folds"]
     _check_range(errs, "n_folds", cfg.get("n_folds"), 1, nf, integer=True)
+    files = split["summary"].get("files", {})
+    for k in range(min(int(cfg.get("n_folds") or 0), nf)):
+        for part in ("train", "val"):
+            f = files.get(f"cv_{k}_{part}")
+            if f and f["n_positive"] in (0, f["n_samples"]):
+                errs.append(f"Fold {k} {part} contains a single class ({f['n_positive']} positives out of "
+                            f"{f['n_samples']} samples): the model cannot be trained/validated. Use more "
+                            "events (no subsample, or a larger one) or a more frequent flare class.")
     if cfg.get("device") not in ("auto", "cpu", "cuda"):
         errs.append("device: auto, cpu or cuda")
-    if model in info.get("gpu_only_models", []) and not info.get("cuda_available"):
-        errs.append(f"{model} uses cupy and requires a CUDA GPU, not available on this machine")
     if cfg.get("device") == "cuda" and not info.get("cuda_available"):
         errs.append("CUDA not available on this machine")
     lk = split["summary"]["leakage"]

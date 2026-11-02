@@ -26,7 +26,8 @@ Analysis made on commit `897a662` (branch `main` of CORNERSTONE-2025). The GUI d
 
 - PyTorch (`PT_MODELS`): LSTM, TRANSFORMER, INCEPTIONTIME, ONEFITSALL and the Time-Series-Library models
   (Autoformer, DLinear, FEDformer, LightTS, Nonstationary_Transformer, Pyraformer, Reformer, TimesNet, Informer).
-- sklearn-like (`SK_MODELS`): XGBOOST, ROCKET, MINIROCKET (the last two use **cupy → GPU required**).
+- sklearn-like (`SK_MODELS`): XGBOOST, ROCKET, MINIROCKET. ROCKET/MINIROCKET import cupy but compute on CPU (sktime + sklearn;
+  their GPU code is commented out); only `free_all_blocks()` is still called.
 - Hyperparameters: `cornerstone/ml/model_configs.py`; SK regularization grid: `regularization_configs.py`.
 - PT training: bce/focal/asymmetric_focal/curriculum loss, Cosine/Plateau scheduler, early stopping on
   tss/val_loss/auc/f1/mcc/hss, threshold optimization on validation, optional Platt/temperature calibration.
@@ -46,13 +47,15 @@ Analysis made on commit `897a662` (branch `main` of CORNERSTONE-2025). The GUI d
 | `run_test`: fixed 0.5 threshold for PT, corrupted return value (reassigns `test_metrics` in the loop), no per-sample predictions | GUI inference built from the package building blocks (`FlareHDF5Dataset`, `ModelManager`, `collect_logits`, `compute_metrics`), explicit threshold, saved predictions |
 | `calibration.kind` key in `train_config.json` ignored (the code reads `type`) | The GUI writes `type` and points it out |
 | Fixed labeling date range (1996–2025) | Documented; cannot be changed without changing the package |
+| ROCKET/MINIROCKET call `cupy._default_memory_pool.free_all_blocks()`, which fails without an NVIDIA GPU | `cupy_cpu_fallback` replaces the pool with a no-op when no CUDA device is found |
+| ONEFITSALL builds its layers on the first forward pass, so a fresh model cannot load its weights (`run_test` fails too) | GUI inference runs one batch through the model before `load_state_dict` |
 | No CME data | Stated in the GUI; nothing simulated |
 
 ## 2. Architecture
 
 ```
 ┌──────────── Streamlit (GUI environment: streamlit, plotly, pandas, h5py, sklearn) ─────────┐
-│ app/pages/*.py  ── cs_gui.ui (components) ── cs_gui.pipeline (validation, variants,        │
+│ app/views/*.py  ── cs_gui.ui (components) ── cs_gui.pipeline (validation, variants,        │
 │                                               reproduction) ── cs_gui.store (artifacts)     │
 │                                               cs_gui.jobs (background processes)            │
 │                                               cs_gui.db (read-only SQLite), metrics, h5info │
@@ -85,6 +88,7 @@ Choices:
    (`SELECT HARPNUM, MIN(T_OBS), MAX(T_OBS) … GROUP BY HARPNUM`) gives the same result (automated test).
 3. `apply_model_overrides`, `register_dataset`, `set_device`, `set_seeds`: in-process configuration.
 4. `make_best_pt_models`: copies `*_fold{best_fold}.pt` → `*_best.pt`.
+5. `cupy_cpu_fallback`: no-op cupy memory pool when no CUDA device is available (ROCKET/MINIROCKET on CPU).
 
 ## 4. Data leakage: rules applied
 
@@ -100,7 +104,8 @@ Choices:
 
 ## 5. Remaining limitations
 
-- ROCKET/MINIROCKET require a CUDA GPU (cupy): on machines without a GPU the GUI blocks them before training.
+- PyTorch models use a GPU only if the runner interpreter has a matching torch build (CUDA for NVIDIA,
+  ROCm for AMD; ROCm devices appear as `cuda` in torch). Otherwise select `cpu`.
 - Bit-for-bit reproducibility is not guaranteed: non-deterministic PyTorch operations, multiple threads,
   different dependency versions. The GUI records the package commit (with a "local changes" flag),
   versions and seeds, and warns if the package changed since the original run.

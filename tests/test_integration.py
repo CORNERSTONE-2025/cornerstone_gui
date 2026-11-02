@@ -84,16 +84,14 @@ def test_shared_db_is_never_modified(demo):
 
 def test_failure_is_recorded_and_never_completed(demo):
     store, jobs = demo["store"], demo["jobs"]
-    # ROCKET needs CUDA (cupy): bypass GUI validation on purpose to exercise the error path
-    mc = store.create("model_config", "R", {"model": "ROCKET", "model_params": {"num_kernels": 10},
+    # unknown model: bypass GUI validation on purpose to exercise the error path
+    mc = store.create("model_config", "R", {"model": "NOT_A_MODEL", "model_params": {},
                                             "training_config": DEFAULT_TRAINING_CONFIG,
                                             "regularization_params": [1e-4], "seed": 1}, status="completed", mode="demo")
     tr = store.create("training", "R fail", {"windows": ["3h"], "window_map": {"3h": 16}, "n_folds": 3,
                                              "device": "cpu"},
                       parents={"split": demo["sp"]["id"], "model_config": mc["id"]}, mode="demo")
     m = run_and_wait(jobs, store, tr["id"])
-    if m["status"] == "completed":
-        pytest.skip("CUDA available: ROCKET does not fail here")
     assert m["status"] == "failed" and m["run"]["error"] and m["run"]["traceback"]
     assert "completed" not in [h["status"] for h in m["history"]]
 
@@ -146,17 +144,17 @@ def test_all_pages_render(demo, monkeypatch):
     monkeypatch.setenv("CS_GUI_MODE", "demo")
     monkeypatch.setenv("CS_GUI_DEMO_WORKSPACE", s.demo_workspace)
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    pages = sorted(os.listdir(os.path.join(root, "app", "pages")))
+    pages = sorted(os.listdir(os.path.join(root, "app", "views")))
     for p in pages + ["../streamlit_app.py"]:
-        at = AppTest.from_file(os.path.join(root, "app", "pages", p), default_timeout=180).run()
+        at = AppTest.from_file(os.path.join(root, "app", "views", p), default_timeout=180).run()
         assert not at.exception, (p, [e.value for e in at.exception])
     # open the detail view of each artifact list
     for page, key in (("labeling.py", "open_labels"), ("dataset.py", "open_dsl"), ("training.py", "open_trl"),
                       ("inference.py", "open_infl")):
-        at = AppTest.from_file(os.path.join(root, "app", "pages", page), default_timeout=180).run()
+        at = AppTest.from_file(os.path.join(root, "app", "views", page), default_timeout=180).run()
         at.selectbox(key=key).select_index(1).run()
         assert not at.exception, (page, [e.value for e in at.exception])
-    at = AppTest.from_file(os.path.join(root, "app", "pages", "active_regions.py"), default_timeout=180).run()
+    at = AppTest.from_file(os.path.join(root, "app", "views", "active_regions.py"), default_timeout=180).run()
     at.multiselect[1].select(at.multiselect[1].options[0]).run()
     assert not at.exception
     assert json.dumps(demo["pl"].export(demo["inf"]["id"]))

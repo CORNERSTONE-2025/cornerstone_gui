@@ -12,7 +12,7 @@ from cs_gui import ui  # noqa: E402
 
 st.set_page_config(page_title="CORNERSTONE GUI", page_icon="☀️", layout="wide")
 
-P = ROOT / "app" / "pages"
+P = ROOT / "app" / "views"        # not "pages/": Streamlit would also run those files on their own
 pages = {
     "Project": [
         st.Page(P / "home.py", title="Home and status", icon="🏠", default=True),

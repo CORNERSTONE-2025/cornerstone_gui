@@ -111,14 +111,6 @@ def introspect(out: str, cornerstone_root: str) -> None:
     from cornerstone.sharp_data import FeatureSelector
     import torch
 
-    gpu_only = []
-    for name, cls in ModelManager.MODEL_CLASSES.items():
-        try:
-            src = inspect.getsource(sys.modules[cls.__module__])
-            if "import cupy" in src:
-                gpu_only.append(name)
-        except (OSError, TypeError):
-            pass
     sigs = {}
     for meth in ("splitting_labeling", "create_hdf5_from_db", "create_dataset_splits", "train_models", "test_model"):
         sig = inspect.signature(getattr(Cornerstone, meth))
@@ -138,7 +130,6 @@ def introspect(out: str, cornerstone_root: str) -> None:
         "packages": provenance.collect(cornerstone_root)["packages"],
         "cuda_available": bool(torch.cuda.is_available()),
         "pt_models": PT_MODELS, "sk_models": SK_MODELS, "trainable_models": trainable,
-        "gpu_only_models": gpu_only,
         "model_configs": json.loads(json.dumps(MODEL_CONFIGS, default=str)),
         "regularization_params": REGULARIZATION_PARAMS,
         "feature_groups": FeatureSelector.FEATURE_GROUPS,

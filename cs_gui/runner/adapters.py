@@ -134,6 +134,22 @@ def register_dataset(key: str, name: str, data_prefix: str, input_dim: int, base
                                "data_prefix": data_prefix, "input_dim": int(input_dim), "base_path": base_path}
 
 
+def cupy_cpu_fallback() -> bool:
+    """ROCKET/MINIROCKET compute on CPU (sktime + sklearn; their cupy code is commented out) but
+    still call ``cupy._default_memory_pool.free_all_blocks()``, which raises without an NVIDIA GPU.
+    Without a usable CUDA device the pool is replaced by a no-op. Returns True if patched."""
+    try:
+        import cupy
+    except ImportError:
+        return False
+    try:
+        cupy.cuda.runtime.getDeviceCount()
+        return False
+    except Exception:  # no NVIDIA driver/device
+        cupy._default_memory_pool = types.SimpleNamespace(free_all_blocks=lambda: None)
+        return True
+
+
 def set_device(device: str) -> str:
     from cornerstone.ml.utils import config as cfg
     import torch

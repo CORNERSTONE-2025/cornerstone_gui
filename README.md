@@ -32,7 +32,8 @@ Requirements:
 - A checkout of the CORNERSTONE package with a working environment (its `.venv` with torch,
   xgboost, h5py, clearml…; [docker/requirements-cornerstone.txt](docker/requirements-cornerstone.txt) lists
   what it needs) and the local SQLite database.
-- A CUDA GPU only for ROCKET/MINIROCKET (cupy). The other models also run on CPU.
+- No GPU is required: every model also runs on CPU. A GPU (NVIDIA CUDA, or AMD with a ROCm build of
+  torch) speeds up the PyTorch models.
 
 ```bash
 git clone https://github.com/CORNERSTONE-2025/cornerstone_gui.git
@@ -123,7 +124,7 @@ uv run pytest -m integration           # real package on the demo DB + all pages
 ## Main limitations
 
 - No CME data in the database: CME sections are not available.
-- ROCKET/MINIROCKET require a GPU (not available in the Docker image).
+- The Docker image is CPU-only.
 - Bit-for-bit reproducibility is not guaranteed for PyTorch models; commit, versions and seeds are recorded.
 - Generated labeling covers the fixed range of the package (1996–2025) and is slow.
 - `db_update()` (download of the dumps from Google Drive) is not exposed in the GUI.

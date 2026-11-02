@@ -252,6 +252,7 @@ def _training_setup(ctx_store: ArtifactStore, training_m: dict, train_cfg_path: 
                               str(ctx_store.path(split["id"]) / split["summary"]["splits_dir"]))
     adapters.apply_model_overrides(mc["model"], mc.get("model_params", {}), mc.get("regularization_params"))
     device = adapters.set_device(training_m["config"].get("device", "auto"))
+    adapters.cupy_cpu_fallback()
     adapters.set_seeds(int(mc.get("seed", 42)))
     from cornerstone.ml.utils import config as cfg
     cfg.set_config_path(str(train_cfg_path))
@@ -454,8 +455,18 @@ def step_inference(ctx: Ctx) -> dict:
             net = ModelManager(model).create_model(model, **{**cfgm, **({"seq_len": steps} if "seq_len" in cfgm else {})})
             k = pkg_metrics[w]["best_fold"] if fold is None else fold
             path = pm.get_model_path(w, fold=k, model_type="PT")
-            net.load_state_dict(torch.load(path, map_location=device))
-            z, y, _, _ = collect_logits(net, DataLoader(ds, batch_size=256), device=device)
+            loader = DataLoader(ds, batch_size=256)
+            state = torch.load(path, map_location=device)
+            net.to(device)
+            try:
+                net.load_state_dict(state)
+            except RuntimeError:
+                # some models (e.g. ONEFITSALL) build their layers on the first forward pass
+                X0, m0 = next(iter(loader))[:2]
+                with torch.no_grad():
+                    net.eval()(X0.to(device), m0.to(device))
+                net.load_state_dict(state)
+            z, y, _, _ = collect_logits(net, loader, device=device)
             p, y = sigmoid(z), y.astype(int)
             cv_thr = pkg_metrics[w]["folds"][k].get("best_threshold")
             cv_src = f"best_threshold of fold {k} (optimized on validation, uncalibrated sigmoid probabilities)"

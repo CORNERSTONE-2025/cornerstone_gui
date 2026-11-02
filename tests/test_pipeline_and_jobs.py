@@ -68,3 +68,14 @@ def test_preflight_refuses_completed_and_bad_settings(store, settings, tmp_path)
     with pytest.raises(StoreError):
         jm.launch([c["id"]])
     assert store.get(c["id"])["status"] == "pending"                 # nothing marked as started
+
+
+def test_relative_settings_paths_are_absolute(tmp_path, monkeypatch):
+    from cs_gui.settings import PROJECT_ROOT, load_settings
+    f = tmp_path / "gui_settings.json"
+    f.write_text('{"workspace": "workspace", "demo_workspace": "workspace_demo", "db_path": "data/x.sqlite"}')
+    for env in ("CS_GUI_WORKSPACE", "CS_GUI_DEMO_WORKSPACE", "CS_GUI_DB_PATH"):
+        monkeypatch.delenv(env, raising=False)
+    s = load_settings(f)
+    assert s.workspace == str(PROJECT_ROOT / "workspace")
+    assert s.db_path == str(PROJECT_ROOT / "data" / "x.sqlite")
