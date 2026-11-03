@@ -2,7 +2,9 @@
 
 Table naming used by the package:
 - ``SHARPC_<version>_<DEF|NRT>``: SHARP CEA keywords, one row per HARP and T_OBS (12 min);
-- ``NOAA_SHARPC_<DEF|NRT>_AR``: GOES X-ray flare events associated to HARPs (``fflux`` in W/m²);
+- ``NOAA_SHARPC_<DEF|NRT>_AR``: GOES X-ray flare events associated to HARPs (``fflux`` in W/m²).
+  The published database has a single ``NOAA_SHARP_AR`` instead, with the events associated to
+  the **NRT** HARPs (see ``flare_table``);
 - ``DF_<DEF|NRT>_<Cplus|Mplus|Xplus>_delta<h>_three_classes``: labels per (t_X, HARP).
 CME catalogues are not part of the database.
 """
@@ -37,7 +39,9 @@ def _mtime(db: str) -> float:
 @lru_cache(maxsize=8)
 def _tables(db: str, _mt: float) -> tuple[str, ...]:
     with closing(connect(db)) as c:
-        return tuple(r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"))
+        # views too: in the published database the label tables DF_*_three_classes are views on *_unified
+        return tuple(r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') "
+                                             "ORDER BY name"))
 
 
 def columns(db: str, table: str) -> list[str]:
@@ -80,9 +84,26 @@ def harp_series(db: str, table: str, harpnum: int, features: list[str] | None = 
     return df
 
 
-def harp_flares(db: str, table_type: str, harpnum: int) -> pd.DataFrame:
+# Flare events of the published database: one table, associated to NRT HARP numbers (checked on
+# the 2025-11-01 dump: 12885 of its 12888 events fall on a day with NRT data of their HARP, none
+# on a day with DEF data of the same number; DEF and NRT HARPs are numbered differently).
+PUBLISHED_NRT_FLARES = "NOAA_SHARP_AR"
+
+
+def flare_table(db: str, table_type: str) -> str | None:
+    """Table of the GOES flare events for SHARP ``table_type`` (DEF/NRT), None if the DB has none."""
     t = f"NOAA_SHARPC_{table_type}_AR"
-    if t not in tables(db):
+    names = tables(db)
+    if t in names:
+        return t
+    if table_type == "NRT" and PUBLISHED_NRT_FLARES in names:
+        return PUBLISHED_NRT_FLARES
+    return None
+
+
+def harp_flares(db: str, table_type: str, harpnum: int) -> pd.DataFrame:
+    t = flare_table(db, table_type)
+    if t is None:
         return pd.DataFrame(columns=["tstart", "tmax", "tend", "part1", "fflux"])
     with closing(connect(db)) as c:
         df = pd.read_sql_query(f'SELECT tstart, tmax, tend, part1, fclass, fflux, NOAA_AR FROM "{t}" '

@@ -19,7 +19,11 @@ Analysis made on commit `897a662` (branch `main` of CORNERSTONE-2025). The GUI d
 
 - `SHARPC_clean_{DEF,NRT}` (17 normalized features `_N1/_N2`) and `SHARPC_all_{DEF,NRT}` (22 features): 12 min cadence.
 - `NOAA_SHARPC_{DEF,NRT}_AR`: GOES XRA flares associated with the HARPs (`fflux` in W/m², `part1` = class).
-- `DF_*_three_classes`: labels `YES`/`NO1..NO4`, `label_u` = flare class (C/M/X).
+  The **published** database has a single `NOAA_SHARP_AR` instead, whose events are associated to the
+  **NRT** HARP numbers (DEF and NRT HARPs are numbered differently): the GUI uses it for NRT and states
+  that DEF has no flare events (no DEF label generation, no flares on the DEF Active Regions plots).
+- `DF_*_three_classes`: labels `YES`/`NO1..NO4`, `label_u` = flare class (C/M/X). In the published
+  database they are views on the `DF_*_three_classes_unified` tables; snapshots copy them as tables.
 - **CME: no table.** The package only handles flares; the GUI states it and does not simulate CME data.
 
 ### Models (`cornerstone.ml`)
@@ -84,7 +88,8 @@ Choices:
 1. `readonly_sqlite_module`: replaces `cornerstone.cornerstone.sqlite3` in the runner process. The main DB
    is opened with `mode=ro` (writes are impossible); the artifact labels DB is `ATTACH`ed and a
    `TEMP VIEW` with the name expected by the package takes precedence over the table of the same name in the main DB.
-2. `build_labeling_db`: private DB with a copy of `NOAA_SHARPC_<t>_AR` and, for `SHARPC_all_<t>`, only the first
+2. `build_labeling_db`: private DB with a copy of the flare events as `NOAA_SHARPC_<t>_AR` (from `NOAA_SHARP_AR` for NRT
+   in the published database) and, for `SHARPC_all_<t>`, only the first
    and last `T_OBS` of every HARP. The query used by `splitting_labeling`
    (`SELECT HARPNUM, MIN(T_OBS), MAX(T_OBS) … GROUP BY HARPNUM`) gives the same result (automated test).
 3. `apply_model_overrides`, `register_dataset`, `set_device`, `set_seeds`: in-process configuration.

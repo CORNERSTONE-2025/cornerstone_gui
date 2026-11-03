@@ -126,6 +126,8 @@ uv run pytest -m integration           # real package on the demo DB + all pages
 ## Main limitations
 
 - No CME data in the database: CME sections are not available.
+- The published database has GOES flare events only for NRT HARPs: DEF labels can only be the existing
+  tables (no generation), and the DEF Active Regions plots show no flares.
 - The Docker image is CPU-only.
 - Bit-for-bit reproducibility is not guaranteed for PyTorch models; commit, versions and seeds are recorded.
 - Generated labeling covers the fixed range of the package (1996–2025) and is slow.

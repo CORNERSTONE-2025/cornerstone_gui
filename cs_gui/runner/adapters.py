@@ -57,18 +57,21 @@ def build_labeling_db(main_db: str, labels_db: str, shtyp: str) -> dict:
 
     ``splitting_labeling`` only needs, from ``SHARPC_all_<shtyp>``, the first and last T_OBS of
     every HARP (``SELECT HARPNUM, MIN(T_OBS), MAX(T_OBS) ... GROUP BY HARPNUM``): two rows per
-    HARP reproduce exactly the same result. ``NOAA_SHARPC_<shtyp>_AR`` (flare events) is copied.
+    HARP reproduce exactly the same result. The flare events are copied as ``NOAA_SHARPC_<shtyp>_AR``,
+    the name the package reads, from the table chosen by ``cs_gui.db.flare_table``.
     """
+    from ..db import flare_table
+    src_table = flare_table(main_db, shtyp)
+    if src_table is None:
+        raise RuntimeError(f"No flare event table for {shtyp} HARPs in the database (NOAA_SHARPC_{shtyp}_AR)")
     src = sqlite3.connect(f"file:{os.path.abspath(main_db)}?mode=ro", uri=True)
     dst = sqlite3.connect(labels_db)
     try:
         noaa = f"NOAA_SHARPC_{shtyp}_AR"
         sharp = f"SHARPC_all_{shtyp}"
-        cols = src.execute(f"SELECT sql FROM sqlite_master WHERE name=?", (noaa,)).fetchone()
-        if cols is None:
-            raise RuntimeError(f"Event table '{noaa}' missing from the database")
-        dst.execute(cols[0])
-        rows = src.execute(f'SELECT * FROM "{noaa}"').fetchall()
+        cols = src.execute(f'PRAGMA table_info("{src_table}")').fetchall()
+        dst.execute(f'CREATE TABLE "{noaa}" (' + ", ".join(f'"{c[1]}" {c[2]}'.rstrip() for c in cols) + ")")
+        rows = src.execute(f'SELECT * FROM "{src_table}"').fetchall()
         if rows:
             dst.executemany(f'INSERT INTO "{noaa}" VALUES ({",".join("?" * len(rows[0]))})', rows)
         bounds = src.execute(f'SELECT HARPNUM, MIN(T_OBS), MAX(T_OBS) FROM "{sharp}" GROUP BY HARPNUM').fetchall()
@@ -83,14 +86,20 @@ def build_labeling_db(main_db: str, labels_db: str, shtyp: str) -> dict:
 
 
 def snapshot_label_table(main_db: str, labels_db: str, table: str) -> int:
-    """Copy an existing label table of the main DB into the artifact DB (read-only on main)."""
+    """Copy an existing label table (or view) of the main DB into the artifact DB (read-only on main)."""
     src = sqlite3.connect(f"file:{os.path.abspath(main_db)}?mode=ro", uri=True)
     dst = sqlite3.connect(labels_db)
     try:
-        ddl = src.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()
-        if ddl is None:
+        obj = src.execute("SELECT type, sql FROM sqlite_master WHERE type IN ('table', 'view') AND name=?",
+                          (table,)).fetchone()
+        if obj is None:
             raise RuntimeError(f"Label table '{table}' not found in the database")
-        dst.execute(ddl[0])
+        if obj[0] == "table":
+            dst.execute(obj[1])
+        else:
+            # a view refers to tables that are not copied: materialize it as a table with its columns
+            cols = src.execute(f'PRAGMA table_info("{table}")').fetchall()
+            dst.execute(f'CREATE TABLE "{table}" (' + ", ".join(f'"{c[1]}" {c[2]}'.rstrip() for c in cols) + ")")
         rows = src.execute(f'SELECT * FROM "{table}"').fetchall()
         if rows:
             dst.executemany(f'INSERT INTO "{table}" VALUES ({",".join("?" * len(rows[0]))})', rows)

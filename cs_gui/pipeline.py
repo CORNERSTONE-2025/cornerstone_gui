@@ -120,9 +120,13 @@ def validate_labels(cfg: dict, settings: Settings) -> list[str]:
         if t not in dbq.tables(db):
             errs.append(f"Table '{t}' does not exist in the database: choose 'generate' or another combination")
     else:
-        for t in (f"SHARPC_all_{cfg['table_type']}", f"NOAA_SHARPC_{cfg['table_type']}_AR"):
-            if t not in dbq.tables(db):
-                errs.append(f"Table required for labeling missing from the database: {t}")
+        t = f"SHARPC_all_{cfg['table_type']}"
+        if t not in dbq.tables(db):
+            errs.append(f"Table required for labeling missing from the database: {t}")
+        if dbq.flare_table(db, cfg["table_type"]) is None:
+            errs.append(f"No flare events for {cfg['table_type']} HARPs in the database "
+                        f"(NOAA_SHARPC_{cfg['table_type']}_AR): labels cannot be generated for "
+                        f"{cfg['table_type']}, use an existing label table or NRT")
     return errs
 
 

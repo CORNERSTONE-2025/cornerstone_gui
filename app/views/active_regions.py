@@ -74,6 +74,9 @@ split_sel = e3.selectbox("Show train/val/test membership of the split", split_op
 
 series = dbq.harp_series(DB, table, harp, feats)
 flares = dbq.harp_flares(DB, table_type, harp)
+if dbq.flare_table(DB, table_type) is None:
+    st.info(f"The database has no GOES flare events associated to {table_type} HARPs: flares are not shown "
+            f"(the published database only has them for NRT).")
 labels = pd.DataFrame()
 if lab_src:
     if str(lab_src).startswith("DF_"):
