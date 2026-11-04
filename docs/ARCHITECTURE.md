@@ -81,6 +81,13 @@ Choices:
   contains both (see [DOCKER.md](DOCKER.md)).
 - **State on disk** (JSON manifest per artifact + job records): it survives GUI restarts; a job that died
   without updating its state is marked `failed` at the next access (`JobManager.reconcile`).
+- **Logs**: the runner and the download write the package stdout/stderr unchanged to a file (`dup2`,
+  unbuffered). `cs_gui.termlog` reads it incrementally and interprets it like a terminal (`\r` redraws
+  the current line, as tqdm does; `\n` adds a line; ANSI cursor/erase sequences), so a progress bar is
+  one updated line. `ui.log_box` shows it in a `st.components.v2` component (no iframe): the DOM
+  survives the 3 s refreshes, so the reader's scroll position and selection are kept, the view follows
+  the end only while scrolled to the bottom, and *Copy all / Select all / Download* act on the whole
+  log (the last 50,000 lines are shown; the file on disk is always complete).
 - **ClearML offline**: the runner forces `CLEARML_OFFLINE_MODE=1` so that runs from the GUI are never published.
 
 ## 3. Adapters (`cs_gui/runner/adapters.py`)

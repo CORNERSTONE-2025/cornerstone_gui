@@ -63,6 +63,15 @@ the first user of the computer).
 | `docker compose up --build -d` | rebuild after a GUI update (`git pull`) |
 | `docker compose exec gui pytest -m "not integration"` | run the unit tests inside the container |
 
+### Updating from an earlier version
+
+`git pull` then `docker compose up --build -d`: the database and the experiments are in volumes or
+folders outside the image, so a rebuild keeps them (never use `docker compose down -v`, which deletes
+the volumes). Versions before the database download looked for the database in `./data` by default;
+the default is now the `db` volume. If your database is in `./data/cornerstone.sqlite` and `.env` does
+not set `CORNERSTONE_DB_DIR`, add `CORNERSTONE_DB_DIR=./data` to `.env` (plus `CORNERSTONE_DB_FILE`
+for a different file name), otherwise the GUI does not find it and starts in demo mode.
+
 ## Where the experiments are stored
 
 All artifacts, logs and GUI settings live in the Docker volume `workspace`, mounted at `/workspace`

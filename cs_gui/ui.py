@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from . import dbsync
+from . import dbsync, termlog
 from .jobs import JobManager
 from .pipeline import Pipeline
 from .settings import Settings, load_settings, save_settings
@@ -151,16 +151,121 @@ def _elapsed(m: dict) -> str:
     return ""
 
 
-def tail(path: Path, n: int = 60) -> str:
-    if not path.exists():
-        return "(no log yet)"
-    with open(path, "rb") as f:
-        f.seek(0, 2)
-        size = f.tell()
-        f.seek(max(0, size - 200_000))
-        data = f.read().decode(errors="replace")
-    lines = [l for l in data.replace("\r", "\n").splitlines() if l.strip()]
-    return "\n".join(lines[-n:])
+# Log viewer: a component (not an iframe) whose DOM survives the reruns of the fragments that
+# refresh it, so the scroll position and the selection of the reader are kept between updates.
+_LOG_CSS = """
+.cs-log { font-family: var(--st-code-font, "Source Code Pro", monospace); font-size: 0.8rem; }
+.cs-log-bar { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; margin-bottom: .3rem; }
+.cs-log-bar button { font: inherit; font-size: .75rem; padding: .1rem .55rem; cursor: pointer; border-radius: .4rem;
+  border: 1px solid rgba(128,128,128,.35); background: var(--st-secondary-background-color, #f0f2f6);
+  color: var(--st-text-color, inherit); }
+.cs-log-bar button:hover { border-color: var(--st-primary-color, #ff4b4b); }
+.cs-log-info { opacity: .7; font-size: .72rem; margin-left: auto; }
+.cs-log-wrap { position: relative; }
+.cs-log pre { margin: 0; padding: .6rem .8rem; overflow: auto; resize: vertical; white-space: pre;
+  min-height: 6rem; border-radius: .5rem; line-height: 1.35; tab-size: 8;
+  background: var(--st-secondary-background-color, #f0f2f6); color: var(--st-text-color, inherit); }
+.cs-log-latest { position: absolute; right: 1.2rem; bottom: .8rem; display: none; font: inherit; font-size: .72rem;
+  padding: .15rem .6rem; cursor: pointer; border-radius: 1rem; border: 1px solid var(--st-primary-color, #ff4b4b);
+  background: var(--st-background-color, #fff); color: var(--st-text-color, inherit); }
+"""
+_LOG_HTML = """
+<div class="cs-log">
+  <div class="cs-log-bar">
+    <button data-act="copy" title="Copy the whole log to the clipboard">Copy all</button>
+    <button data-act="select" title="Select the whole log (then Ctrl+C)">Select all</button>
+    <button data-act="download" title="Save the log as a text file">Download</button>
+    <button data-act="top" title="First line">Top</button>
+    <span class="cs-log-info"></span>
+  </div>
+  <div class="cs-log-wrap"><pre tabindex="0"></pre>
+    <button class="cs-log-latest" title="Go to the latest lines and follow them">Latest lines</button></div>
+</div>
+"""
+_LOG_JS = """
+export default function (component) {
+  const { data, parentElement } = component;
+  const root = parentElement.querySelector(".cs-log");
+  const pre = root.querySelector("pre");
+  const latest = root.querySelector(".cs-log-latest");
+  const info = root.querySelector(".cs-log-info");
+  const atBottom = () => pre.scrollHeight - pre.scrollTop - pre.clientHeight < 6;
+  const selectionInLog = () => {
+    const s = window.getSelection();
+    return s && !s.isCollapsed && s.rangeCount > 0 && pre.contains(s.getRangeAt(0).commonAncestorContainer);
+  };
+  const apply = (d) => {
+    // the reader is following the end of the log: keep following; otherwise keep the position
+    const follow = root._csVersion === undefined || atBottom();
+    const top = pre.scrollTop;
+    pre.textContent = d.text;
+    root._csVersion = d.version;
+    root._csPending = null;
+    if (follow) pre.scrollTop = pre.scrollHeight; else pre.scrollTop = top;
+    latest.style.display = atBottom() ? "none" : "block";
+  };
+  if (!root._csInit) {
+    root._csInit = true;
+    pre.addEventListener("scroll", () => { latest.style.display = atBottom() ? "none" : "block"; });
+    latest.addEventListener("click", () => { pre.scrollTop = pre.scrollHeight; });
+    // an update would discard the text being selected: applied when the selection is released
+    document.addEventListener("selectionchange", () => {
+      if (root._csPending && !selectionInLog()) apply(root._csPending);
+    });
+    root.querySelector(".cs-log-bar").addEventListener("click", async (ev) => {
+      const act = ev.target && ev.target.dataset ? ev.target.dataset.act : null;
+      const d = root._csData;
+      if (!act || !d) return;
+      const text = (root._csPending || d).text;
+      if (act === "select" || act === "copy") {
+        const r = document.createRange(); r.selectNodeContents(pre);
+        const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      }
+      if (act === "copy") {
+        let ok = false;
+        try { await navigator.clipboard.writeText(text); ok = true; } catch (e) {}
+        if (!ok) { try { ok = document.execCommand("copy"); } catch (e) {} }
+        ev.target.textContent = ok ? "Copied" : "Copy failed: use Select all + Ctrl+C";
+        setTimeout(() => { ev.target.textContent = "Copy all"; }, 2000);
+      } else if (act === "download") {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+        a.download = d.name || "log.txt"; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      } else if (act === "top") {
+        pre.scrollTop = 0;
+      }
+    });
+  }
+  root._csData = data;
+  pre.style.height = data.height + "px";
+  info.textContent = data.info;
+  if (data.version === root._csVersion) return;
+  if (selectionInLog()) { root._csPending = data; return; }
+  apply(data);
+}
+"""
+
+
+def _log_view():
+    # registered at every use, not at import: the registry belongs to the Streamlit runtime (a new
+    # one after a server restart or in AppTest), and registering the same definition again is a no-op
+    return st.components.v2.component("cs_log_view", html=_LOG_HTML, css=_LOG_CSS, js=_LOG_JS,
+                                      isolate_styles=False)
+
+
+def log_box(path: Path | str | None, key: str, height: int = 380) -> None:
+    """Terminal-like view of a log file: progress bars on one line, whole history scrollable,
+    copy/select/download of the full text, the reader's scroll position kept while it grows."""
+    r = termlog.read_log(path) if path else {"exists": False}
+    if not r["exists"]:
+        st.caption("(no log yet)")
+        return
+    info = f"{r['n_lines']:,} lines · {r['size'] / 1e6:.2f} MB"
+    if r["hidden_lines"]:
+        info += (f" · showing the last {termlog.DISPLAY_MAX_LINES:,} (the full file is {path})")
+    _log_view()(key=f"cslog_{key}", data={"text": r["text"], "version": r["size"], "info": info, "height": height,
+                                         "name": Path(path).name.replace(".log", "") + ".log.txt"})
 
 
 @st.fragment(run_every=3)
@@ -181,7 +286,7 @@ def job_monitor(types: list[str] | None = None) -> None:
                 c.jobs.cancel(job_id)
                 st.rerun()
             with st.expander("Live log", expanded=m["status"] == "running"):
-                st.code(tail(c.store.log_path(m["id"]), 25), language="text")
+                log_box(c.store.log_path(m["id"]), key=f"live_{m['id']}", height=300)
 
 
 @st.fragment(run_every=3)
@@ -225,7 +330,7 @@ def db_download_panel() -> None:
             st.rerun(scope="app")
     if job.get("log"):
         with st.expander("Download log", expanded=stt["running"]):
-            st.code(tail(Path(job["log"]), 25), language="text")
+            log_box(job["log"], key="db_update", height=300)
 
 
 def artifact_status_box(m: dict) -> None:
@@ -240,8 +345,8 @@ def artifact_status_box(m: dict) -> None:
         st.warning(run.get("error") or "Cancelled")
 
 
-def log_viewer(aid: str, lines: int = 300) -> None:
-    st.code(tail(ctx().store.log_path(aid), lines), language="text")
+def log_viewer(aid: str, height: int = 380) -> None:
+    log_box(ctx().store.log_path(aid), key=f"art_{aid}", height=height)
 
 
 def artifact_list(types, columns_fn=None, key: str = "list") -> str | None:

@@ -68,7 +68,7 @@ with tab_det:
         st.markdown("**History**")
         st.dataframe(pd.DataFrame(m.get("history", [])), hide_index=True)
     with t2:
-        ui.log_viewer(aid, 1000)
+        ui.log_viewer(aid, 520)
     with t3:
         full = st.checkbox("Full checksum verification (slow for large files)", True)
         if st.button("Verify the integrity of the artifact and its dependencies"):
@@ -162,5 +162,4 @@ with tab_jobs:
         st.dataframe(pd.DataFrame([{"job": j["id"], "active": j["alive"], "artifacts": ", ".join(j["artifacts"]),
                                     "started": j["started_at"][:19]} for j in jobs]), hide_index=True, width="stretch")
         jid = st.selectbox("Job log", [j["id"] for j in jobs])
-        from pathlib import Path
-        st.code(ui.tail(Path(c.jobs.get(jid)["log"]), 200), language="text")
+        ui.log_box(c.jobs.get(jid)["log"], key=f"job_{jid}")
