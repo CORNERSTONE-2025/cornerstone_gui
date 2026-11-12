@@ -140,6 +140,30 @@ def test_reproduce_chain_gives_same_metrics(demo):
         assert a["TSS"] == pytest.approx(b["TSS"]) and a["ROC_AUC"] == pytest.approx(b["ROC_AUC"])
 
 
+def test_bundle_moves_the_chain_to_another_installation(demo, tmp_path):
+    """The whole chain exported and imported in a new workspace: a new inference runs on the imported
+    model and split without re-running anything upstream, with the same metrics."""
+    from cs_gui import bundle
+    src = demo["settings"]
+    out = tmp_path / "chain.zip"
+    bundle.export_bundle(demo["store"], [demo["inf"]["id"]], out)
+    s2 = Settings(cornerstone_root=CORNERSTONE_ROOT, demo_workspace=str(tmp_path / "other"), mode="demo",
+                  min_free_disk_gb=0.1)
+    s2_store = ArtifactStore(s2.active_workspace)
+    r = bundle.import_bundle(s2_store, out, mode="demo")
+    assert demo["tr"]["id"] in r["imported"] and all(s2_store.verify(a) == [] for a in r["imported"])
+    jobs2, pl2 = JobManager(s2, s2_store), Pipeline(s2, s2_store)
+    # an installation needs a data store to start jobs (inference itself reads only the imported split)
+    import shutil
+    shutil.copytree(src.demo_data_root, s2.demo_data_root)
+    inf = run_and_wait(jobs2, s2_store, pl2.create_inference("I2", demo["tr"]["id"], demo["sp"]["id"],
+                                                             demo["inf"]["config"])["id"])
+    assert inf["status"] == "completed", dump(inf)
+    for w in demo["inf"]["summary"]["windows"]:
+        assert inf["summary"]["windows"][w]["metrics"]["TSS"] == \
+            pytest.approx(demo["inf"]["summary"]["windows"][w]["metrics"]["TSS"])
+
+
 def test_all_pages_render(demo, monkeypatch):
     from streamlit.testing.v1 import AppTest
     s = demo["settings"]

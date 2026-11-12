@@ -75,3 +75,30 @@ workspace/                    # real mode (workspace_demo/ for demo mode)
   **reproduction** (new id, `derived_from` → original).
 - Deletion requires explicit confirmation and is refused if dependents exist, unless a cascade is confirmed.
 - Integrity is checked by comparing file size and sha256 with the manifest and the status of the parents.
+
+## Moving artifacts between installations (bundles)
+
+*Experiments and pipeline* → *Share (export / import)*, or from the command line:
+
+```bash
+python -m cs_gui.bundle export --workspace workspace --out chain.zip trn-20261112-101500-ab12
+python -m cs_gui.bundle import --workspace workspace chain.zip
+```
+
+A bundle is a zip with `bundle.json` (format, version, list of artifacts with dependencies first,
+note) and `artifacts/<id>/…`, the complete folder of every artifact. Rules:
+
+- export takes **completed** artifacts and adds **all their ancestors**, so the bundle is self-contained;
+- ids are kept: the imported artifacts keep their dependencies and appear in every page with their results;
+  they can be the input of new steps (inference, new splits from an imported dataset, …);
+- import checks every file against the sha256 of its manifest before anything enters the workspace, and
+  never overwrites: an artifact already present with the same outputs is skipped, the same id with
+  different outputs refuses the whole import; entries outside `artifacts/<listed id>/` are refused;
+- demo and real artifacts never mix; the manifest records `imported` (date, bundle) and a history event;
+- paths inside the artifacts are relative to the artifact folder; the only absolute paths are in the
+  configuration files written for the package (`split_config.json`, `train_config.json`), which are a
+  record of the run: inference writes a copy of the training configuration pointing to the current folder
+  (`train_config_used.json`).
+
+The bundle carries results, not the data store: labeling and dataset extraction on the receiving side
+need their own data (Data page), while inference on an imported split or dataset does not use it.

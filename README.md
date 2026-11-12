@@ -102,6 +102,10 @@ With Docker: `docker compose exec gui python examples/run_pipeline.py --mode dem
 - **Reproduce the whole chain**: new copies of all upstream steps, wired to each other.
 - **Resume**: runs only the steps of the chain not completed yet (restart after errors or interruptions).
 - **Export**: JSON with manifest, configurations and provenance of the whole chain.
+- **Share with another installation**: *Experiments* → *Share* → export a zip bundle (the chosen artifacts
+  with all their ancestors and files); whoever imports it gets the results without re-running anything and
+  can continue from them (e.g. a new inference with the imported model). Command line:
+  `python -m cs_gui.bundle export|import` (see [docs/ARTIFACTS.md](docs/ARTIFACTS.md)).
 - **Verify integrity**: sha256 of the files and status of the dependencies.
 
 ## Demo mode

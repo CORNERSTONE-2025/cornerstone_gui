@@ -413,7 +413,13 @@ def step_inference(ctx: Ctx) -> dict:
     c = ctx.config
     tr = ctx.parent("training")
     tr_dir = ctx.parent_dir("training")
-    split, mc, tc, device = _training_setup(ctx.store, tr, tr_dir / "train_config.json")
+    # the training config holds absolute paths of the machine where it ran (artifacts may have been
+    # moved or imported from a bundle): use a copy pointing to the training folder as it is now
+    tc_local = json.loads((tr_dir / "train_config.json").read_text())
+    tc_local.setdefault("OUTPUT_CONFIG", {})["results_dir"] = str(tr_dir / "results")
+    tc_path = ctx.dir / "train_config_used.json"
+    tc_path.write_text(json.dumps(tc_local, indent=2))
+    split, mc, tc, device = _training_setup(ctx.store, tr, tc_path)
     model = mc["model"]
     features = split["summary"]["feature_names"]
     pm = _path_manager(tr_dir / "results", split["summary"]["task_name"], model)

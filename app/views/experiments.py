@@ -1,15 +1,16 @@
 import json
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
-from cs_gui import ui
+from cs_gui import bundle, ui
 from cs_gui.store import ARTIFACT_TYPES, StoreError
 
 c = ui.page_header("Experiments, pipeline and reproducibility",
                    "Artifact catalogue, dependency graph, integrity, variants, reproduction and resume.")
 
-tab_cat, tab_det, tab_jobs = st.tabs(["Catalogue", "Details and actions", "Jobs"])
+tab_cat, tab_det, tab_share, tab_jobs = st.tabs(["Catalogue", "Details and actions", "Share (export / import)", "Jobs"])
 
 with tab_cat:
     a, b, d = st.columns(3)
@@ -154,6 +155,73 @@ with tab_det:
                          f"TSS {other}": ((sb.get("windows") or {}).get(w, {}).get("metrics") or {}).get("TSS")}
                         for w in sa.get("windows", {})]
                 st.dataframe(pd.DataFrame(comp), hide_index=True)
+
+with tab_share:
+    st.markdown("Artifacts can be moved to another installation **with their results**: whoever imports "
+                "them sees labels, datasets, models and metrics without re-running the chain, and can use "
+                "them as input of new steps (e.g. inference with an imported model). A bundle contains the "
+                "chosen artifacts **and all their ancestors**; every file is checked (sha256) on import.")
+    ex, im = st.columns(2)
+    with ex:
+        st.markdown("#### Export")
+        done = [m for m in c.store.list() if m["status"] == "completed"]
+        pick = st.multiselect("Artifacts to export", [m["id"] for m in done],
+                              [st.session_state["exp_sel"]] if st.session_state.get("exp_sel") in
+                              {m["id"] for m in done} else [],
+                              format_func=lambda x: ui.label_of(c.store.get(x)), key="bundle_pick")
+        if pick:
+            todo = bundle.bundle_ids(c.store, pick)
+            mb = sum(c.store.size_bytes(x) for x in todo) / 1e6
+            st.caption(f"{len(todo)} artifacts with the ancestors ({mb:,.1f} MB before compression): "
+                       + ", ".join(todo))
+            note = st.text_input("Note for whoever receives it", "", key="bundle_note")
+            if st.button("Create the bundle", type="primary"):
+                out = c.store.workspace / "exports" / f"cornerstone_{pick[0]}{'_and_more' if len(pick) > 1 else ''}.zip"
+                try:
+                    with st.spinner("Packing…"):
+                        st.session_state["bundle_out"] = bundle.export_bundle(c.store, pick, out, note)
+                except StoreError as e:
+                    st.error(str(e))
+        res = st.session_state.get("bundle_out")
+        if res and Path(res["file"]).exists():
+            st.success(f"Bundle ready: `{res['file']}` ({res['size'] / 1e6:,.1f} MB)")
+            if res["size"] < 2e9:
+                with open(res["file"], "rb") as fh:
+                    st.download_button("Download the bundle", fh, file_name=Path(res["file"]).name,
+                                       mime="application/zip")
+            else:
+                st.caption("Too large to download from the browser: copy the file from the workspace.")
+    with im:
+        st.markdown("#### Import")
+        up = st.file_uploader("Bundle (.zip)", type=["zip"], key="bundle_up")
+        srv = st.text_input("…or path of a bundle on this machine (e.g. in the workspace)", "", key="bundle_path")
+        if (up or srv) and st.button("Import", type="primary"):
+            src = None
+            try:
+                if up:
+                    tmp_dir = c.store.workspace / "imports"
+                    tmp_dir.mkdir(parents=True, exist_ok=True)
+                    src = tmp_dir / up.name
+                    with open(src, "wb") as fh:
+                        fh.write(up.getbuffer())
+                else:
+                    src = Path(srv)
+                info = bundle.read_bundle(src)
+                with st.spinner(f"Checking and importing {len(info['artifacts'])} artifacts…"):
+                    r = bundle.import_bundle(c.store, src, mode=c.settings.mode)
+                st.success(f"Imported {len(r['imported'])} artifacts" + (f", {len(r['skipped'])} already present"
+                                                                          if r["skipped"] else "")
+                           + (f". Note: {r['note']}" if r["note"] else ""))
+                st.json(r, expanded=False)
+            except (StoreError, OSError, ValueError) as e:
+                st.error(f"Import failed, nothing was changed: {e}")
+            finally:
+                if up and src is not None and src.exists():
+                    src.unlink()
+        st.caption("Artifacts keep their id, so their dependencies stay wired. An artifact already present "
+                   "with the same contents is skipped; same id with different contents refuses the import. "
+                   "Demo and real artifacts never mix. With Docker, large bundles can also be copied into the "
+                   "container (`docker compose cp file.zip gui:/workspace/real/`) and imported by path.")
 
 with tab_jobs:
     ui.job_monitor()

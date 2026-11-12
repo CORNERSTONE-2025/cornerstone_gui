@@ -3,3 +3,5 @@ gatherUsageStats = false
 
 [server]
 headless = true
+# artifact bundles (Experiments → Share) can hold datasets and models
+maxUploadSize = 8000
