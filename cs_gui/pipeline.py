@@ -8,18 +8,55 @@ from __future__ import annotations
 import copy
 import datetime as dt
 import json
+import re
 import subprocess
 from pathlib import Path
 
-from . import db as dbq
+from . import datastore
 from .jobs import runner_env
 from .settings import Settings
 from .store import ArtifactStore, StoreError
 
 # --------------------------------------------------------------------------- package options
-LABEL_TYPES = {"Cplus": "C+ (flux ≥ 1e-6 W/m²)", "Mplus": "M+ (≥ 1e-5)", "Xplus": "X+ (≥ 1e-4)"}   # splitting_labeling
-TABLE_TYPES = {"DEF": "DEF (definitive SHARP CEA)", "NRT": "NRT (near-real-time)"}
-DATA_VERSIONS = {"clean": "clean (17 normalized features _N1/_N2)", "all": "all (22 SHARP features)"}  # _select_db_config
+SERIES = datastore.SERIES                                                             # SHARP series of the store
+THRESHOLDS = {"C": "C (flux ≥ 1e-6 W/m²)", "M": "M (≥ 1e-5)", "X": "X (≥ 1e-4)"}       # labeling.threshold_flux
+FEATURE_SETS = {"clean": "clean (17 features, _N1/_N2 normalized)", "all": "all (22 raw SHARP keywords)"}  # processing.features
+CALIBRATIONS = {"science": "science (GOES-8…15 fluxes / 0.7, consistent across satellites)",
+                "operational": "operational (as reported by SWPC)"}                    # processing.FlareConfig
+AMBIGUOUS_RULES = {"position_then_flux": "patch containing the flare position, else largest USFLUX",
+                   "position_then_all": "patch containing the flare position, else every candidate",
+                   "flux": "largest USFLUX", "all": "every candidate HARP"}
+QUALITY_KEYS = ("require_position", "quality_mask", "quality_values", "cmask_gt", "meangbt_gt", "max_abs_lon",
+                "exclude_years")                                                       # processing.QualityFilter
+FLARE_DEFAULTS = {"calibration": "science", "peak_fallback": "start", "ambiguous": "position_then_flux",
+                  "position_margin_deg": 2.0, "max_gap_hours": 24.0}
+_THRESHOLD_RE = re.compile(r"^[ABCMX](\d+(\.\d+)?)?$")
+
+
+def quality_preset(name: str, series: str) -> dict:
+    """``QualityFilter`` parameters of the presets (same values as the package)."""
+    q = {"require_position": True, "quality_mask": None, "quality_values": None, "cmask_gt": None,
+         "meangbt_gt": None, "max_abs_lon": None, "exclude_years": []}
+    if name == "legacy_clean":          # QualityFilter.legacy_clean: rows of the former SHARPC_clean tables
+        q.update(quality_values=[0x400] if series == "NRT" else [0], cmask_gt=5000.0, meangbt_gt=0.0,
+                 exclude_years=[2013] if series == "NRT" else [])
+    elif name != "default":
+        raise ValueError(f"unknown quality preset {name!r}")
+    return q
+
+
+def default_label_config(series: str = "DEF", threshold: str = "M", **overrides) -> dict:
+    """Labeling configuration with the package defaults (unlimited before/after windows)."""
+    cfg = {"series": series, "threshold": threshold, "flare_window_hours": 24.0, "step_hours": 24.0,
+           "strat_threshold": None, "strat_window_hours": None, "start": None, "end": None,
+           "quality": quality_preset("default", series), "flares": dict(FLARE_DEFAULTS)}
+    cfg.update(overrides)
+    return cfg
+
+
+def label_key(cfg: dict) -> str:
+    """Name of the label in the HDF5 files (``cornerstone.dataset.label_name``), e.g. ``Mplus_delta24``."""
+    return f"{cfg['threshold']}plus_delta{float(cfg['flare_window_hours']):g}"
 MISSINGNESS_MODES = ["multi_window_empty", "multi_window", "single_window", "none"]   # create_dataset_splits step 8
 TEMPORAL_FILTER_MODES = [None, "select", "filter", "exclude"]                          # step 9
 CMASK_STRATEGIES = ["any", "majority", "average", "minimum"]                          # CMASKFilter
@@ -103,46 +140,86 @@ def _require_completed(store: ArtifactStore, aid: str | None, expected_type, rol
 
 
 # --------------------------------------------------------------------------- validators
+def _check_threshold(errs, name, v):
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        if v <= 0:
+            errs.append(f"{name}: a flux must be > 0")
+    elif not (isinstance(v, str) and _THRESHOLD_RE.match(v.strip().upper())):
+        errs.append(f"{name}: a GOES class such as C, M, X, M5 or C2.5, or a flux in W/m²")
+
+
 def validate_labels(cfg: dict, settings: Settings) -> list[str]:
     errs = []
-    if cfg.get("source") not in ("existing", "generate"):
-        errs.append("source: 'existing' or 'generate'")
-    if cfg.get("table_type") not in TABLE_TYPES:
-        errs.append(f"table_type: one of {list(TABLE_TYPES)}")
-    if cfg.get("label_type") not in LABEL_TYPES:
-        errs.append(f"label_type: one of {list(LABEL_TYPES)}")
-    _check_range(errs, "delta_hours", cfg.get("delta_hours"), 1, 240, integer=True)
+    if cfg.get("series") not in SERIES:
+        errs.append(f"series: one of {list(SERIES)}")
+    _check_threshold(errs, "threshold", cfg.get("threshold"))
+    if cfg.get("strat_threshold") is not None:
+        _check_threshold(errs, "strat_threshold", cfg.get("strat_threshold"))
+    _check_range(errs, "flare_window_hours", cfg.get("flare_window_hours"), 0.2, 24 * 30)
+    _check_range(errs, "step_hours", cfg.get("step_hours"), 0.2, 24 * 30)
+    if cfg.get("strat_window_hours") is not None:
+        _check_range(errs, "strat_window_hours", cfg.get("strat_window_hours"), 0.2, 24 * 365)
+    try:
+        a, b = _date(cfg.get("start"), "start"), _date(cfg.get("end"), "end")
+        if a and b and a >= b:
+            errs.append("start must be before end")
+    except ValueError as e:
+        errs.append(str(e))
+    q = cfg.get("quality") or {}
+    if set(q) != set(QUALITY_KEYS):
+        errs.append(f"quality: parameters {list(QUALITY_KEYS)}")
+    else:
+        for k in ("cmask_gt", "meangbt_gt", "max_abs_lon"):
+            if q[k] is not None and not isinstance(q[k], (int, float)):
+                errs.append(f"quality.{k}: number or empty")
+        if q["max_abs_lon"] is not None and not 0 < q["max_abs_lon"] <= 90:
+            errs.append("quality.max_abs_lon: between 0 and 90 degrees")
+    f = cfg.get("flares") or {}
+    if f.get("calibration") not in CALIBRATIONS:
+        errs.append(f"flares.calibration: one of {list(CALIBRATIONS)}")
+    if f.get("ambiguous") not in AMBIGUOUS_RULES:
+        errs.append(f"flares.ambiguous: one of {list(AMBIGUOUS_RULES)}")
+    if f.get("peak_fallback") not in ("start", "drop"):
+        errs.append("flares.peak_fallback: 'start' or 'drop'")
+    _check_range(errs, "flares.max_gap_hours", f.get("max_gap_hours"), 0, 24 * 30)
+    _check_range(errs, "flares.position_margin_deg", f.get("position_margin_deg"), 0, 30)
     if errs:
         return errs
-    db = settings.active_db_path
-    if cfg["source"] == "existing":
-        t = f"DF_{cfg['table_type']}_{cfg['label_type']}_delta{cfg['delta_hours']}_three_classes"
-        if t not in dbq.tables(db):
-            errs.append(f"Table '{t}' does not exist in the database: choose 'generate' or another combination")
-    else:
-        t = f"SHARPC_all_{cfg['table_type']}"
-        if t not in dbq.tables(db):
-            errs.append(f"Table required for labeling missing from the database: {t}")
-        if dbq.flare_table(db, cfg["table_type"]) is None:
-            errs.append(f"No flare events for {cfg['table_type']} HARPs in the database "
-                        f"(NOAA_SHARPC_{cfg['table_type']}_AR): labels cannot be generated for "
-                        f"{cfg['table_type']}, use an existing label table or NRT")
+    root = settings.active_data_root
+    if not datastore.has_series(root, cfg["series"]):
+        errs.append(f"No SHARP {cfg['series']} data in the store: download it from the Data page")
+    st = datastore.status(root)
+    if "goes/swpc_events" not in set(st["key"]):
+        errs.append("No GOES flare events in the store: download them from the Data page")
+    if cfg["series"] == "DEF" and "harp_noaa" not in set(st["key"]):
+        errs.append("The HARP ↔ NOAA map (needed for DEF) is missing: download it from the Data page")
     return errs
 
 
 def validate_dataset(cfg: dict, labels: dict, settings: Settings) -> list[str]:
     errs = []
-    if cfg.get("data_version") not in DATA_VERSIONS:
-        errs.append(f"data_version: one of {list(DATA_VERSIONS)}")
+    if "series" not in labels["config"]:
+        return ["These labels were made by an earlier GUI version (SQLite database): create new labels"]
+    if cfg.get("features") not in FEATURE_SETS:
+        errs.append(f"features: one of {list(FEATURE_SETS)}")
+    if cfg.get("quality_source") not in ("feature_set", "labels"):
+        errs.append("quality_source: 'feature_set' or 'labels'")
     _check_range(errs, "window_hours", cfg.get("window_hours"), 1, 240, integer=True)
-    _check_range(errs, "buffer_minutes", cfg.get("buffer_minutes"), 0, 120, integer=True)
-    _check_range(errs, "sampling_interval", cfg.get("sampling_interval"), 1, 120, integer=True)
+    _check_range(errs, "sampling_minutes", cfg.get("sampling_minutes"), 1, 120, integer=True)
     if cfg.get("subsample"):
         _check_range(errs, "subsample_size", cfg.get("subsample_size"), 1, labels["summary"].get("n_rows"), integer=True)
-    if not errs:
-        t = f"SHARPC_{cfg['data_version']}_{labels['config']['table_type']}"
-        if t not in dbq.tables(settings.active_db_path):
-            errs.append(f"Feature table missing from the database: {t}")
+    if errs:
+        return errs
+    sm = cfg["sampling_minutes"]
+    if 1440 % sm:
+        errs.append("sampling_minutes must divide a day (e.g. 6, 12, 15, 30, 60)")
+    if (cfg["window_hours"] * 60) % sm:
+        errs.append("window_hours × 60 must be a multiple of sampling_minutes")
+    step_min = float(labels["config"].get("step_hours", 24)) * 60
+    if step_min % sm:
+        errs.append(f"The t_X grid of the labels (every {step_min:g} min) is not on the {sm}-minute sampling grid")
+    if not datastore.has_series(settings.active_data_root, labels["config"].get("series", "")):
+        errs.append(f"No SHARP {labels['config'].get('series')} data in the store")
     return errs
 
 

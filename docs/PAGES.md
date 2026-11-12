@@ -4,24 +4,37 @@ Every option listed maps to a package feature (source in brackets).
 
 ## Home and status
 Workflow diagram, artifact counts by type and status, active jobs, environment status (package
-commit, CUDA, DB, disk space), real database download/update (`Cornerstone.db_update`, live log,
-cancel, switch to Real mode), path and mode configuration, demo DB generation.
+commit, CUDA, data store, disk space), path and mode configuration, demo data generation.
 
-## Labeling (`Cornerstone.splitting_labeling`)
+## Data (`cornerstone.data`)
+Content of the store (datasets, rows, size, data until, last update) and, in the background with a live
+log: update from the sources (choice of sources, `--full`), published snapshot (`bootstrap-snapshot`),
+import of the former SQLite database (`bootstrap-sqlite`). Stop; log of the last run.
+
+## Labeling (`cornerstone.labeling`)
 | Parameter | Values | Notes |
 |---|---|---|
-| Source | snapshot of an existing table / generate | generation uses a private DB (the shared DB is not touched) |
-| `shtyp` | DEF, NRT | definitive or near-real-time SHARP data |
-| `class0` | Cplus, Mplus, Xplus | thresholds 1e-6, 1e-5, 1e-4 W/m² |
-| `delta_hours` | 1–240 (default 24) | width of the before/after/after-after windows and grid step |
+| SHARP series | DEF, NRT | definitive or near-real-time SHARP data |
+| Prediction threshold S_p | C, M, X, or custom (e.g. M5, 3e-6) | flux ≥ threshold counts |
+| Flare window W | hours (default 24) | YES if a flare ≥ S_p peaks in [t_X, t_X + W] |
+| Grid step Δ | hours (default 24) | t_X aligned to midnight UTC |
+| Stratification threshold S_s | same as S_p, C, M, X, custom | class of the stratification label |
+| Stratification window L | unlimited (default) or hours (default W) | "before" [t_X − L, t_X], "after" [t_X + W, t_X + W + L] |
+| Time range | whole span or from/to | range of t_X |
+| Records (quality) | every record with a position / former SHARPC_clean / custom (QUALITY bits or values, CMASK, MEANGBT, longitude, years) | defines when a HARP is observed and the flare association |
+| GOES calibration | science (default) / operational | GOES-8…15 fluxes divided by 0.7 |
+| Ambiguous association | position then USFLUX (default), position then all, USFLUX, all | several HARPs with the flare's NOAA region |
+| Max gap, position tolerance, peak fallback | 24 h, 2°, start | flares just outside the HARP span; patch box; events without peak |
 
-Results: rows, ARs, fraction of YES, `label`/`label_u` distribution, positives per year, `labels.csv`.
+Preset button: the former static tables (W = L = Δ = 24 h). Results: rows, ARs, fraction of YES,
+distribution of the prediction label and of the stratification class, positives per year, flare
+association counts, `labels.csv` / `labels.parquet`.
 
 ## Dataset
-**1 · Extraction** (`create_hdf5_from_db`): `data_version` (clean = 17 features, all = 22),
-`window_hours` (history before t_X), `buffer_minutes`, `sampling_interval` (minutes),
-random subsample (`test_mode`/`test_size`, seed). Results: samples, features, time range,
-ARs, classes, % NaN per feature, events excluded for missing data.
+**1 · Extraction** (`cornerstone.dataset.build_dataset`): feature set (clean = 17 features, all = 22),
+records used (default of the feature set or the labels' filter), `window_hours` (history before t_X),
+sampling step (minutes), random subsample (seed). Results: samples, features, time range,
+ARs, classes, stratification classes, % NaN per feature, labeled pairs excluded for missing data.
 
 **2 · Filters and split** (`create_dataset_splits`):
 - Features: `FEATURE_SELECTION_MODE` direct (multiselect) or criterion (`FeatureSelector` groups; the GUI

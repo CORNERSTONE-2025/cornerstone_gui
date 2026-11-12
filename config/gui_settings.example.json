@@ -1,7 +1,8 @@
 {
   "cornerstone_root": "../cornerstone_db_package",
   "cornerstone_python": "",
-  "db_path": "",
+  "data_root": "",
+  "legacy_db_path": "",
   "workspace": "workspace",
   "demo_workspace": "workspace_demo",
   "mode": "real",

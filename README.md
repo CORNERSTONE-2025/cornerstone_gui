@@ -4,14 +4,14 @@ Graphical interface for the [CORNERSTONE DB package](https://github.com/CORNERST
 (solar flare forecasting from the SHARP/HMI parameters of Active Regions). It runs and manages the
 whole pipeline without writing code:
 
-**SQLite DB → labeling → HDF5 dataset → filters and split → model configuration → CV training → inference
+**Data (SHARP + GOES) → labeling → HDF5 dataset → filters and split → model configuration → CV training → inference
 on unseen events → metrics, comparison, Active Region history**
 
 Every step uses the real functions of the package and produces a **persistent, versioned artifact**
 (configuration, files, log, checksums, code versions), so experiments can be resumed, reproduced and compared.
 
-> The GUI never modifies the package code, and opens the database read-only. The only exception is the
-> database download (Home page), which creates or updates the database file through the package's `db_update()`.
+> The GUI never modifies the package code, and only reads the data store. The only exception is the
+> **Data** page, which downloads and updates the store through the package (`python -m cornerstone.data`).
 
 ## Quick start with Docker (recommended)
 
@@ -21,10 +21,9 @@ cd cornerstone_gui
 docker compose up --build -d          # then open http://localhost:8501
 ```
 
-Without a database the GUI starts in demo mode on synthetic data. To use real data, click
-*Download the database* on the Home page (about 7 GB of free space, it takes a while) and then
-*Switch to Real mode*. A database you already have can be used instead: see [docs/DOCKER.md](docs/DOCKER.md).
-All details: [docs/DOCKER.md](docs/DOCKER.md).
+Without data the GUI starts in demo mode on synthetic data. To use real data, open the **Data** page and
+download it (from the sources, from the published snapshot, or by importing a `cornerstone.sqlite` of the
+former dump), then switch to Real mode in *Home → GUI configuration*. All details: [docs/DOCKER.md](docs/DOCKER.md).
 
 ## Local installation (without Docker)
 
@@ -33,7 +32,7 @@ Requirements:
 - Linux, Python ≥ 3.10, [uv](https://docs.astral.sh/uv/).
 - A checkout of the CORNERSTONE package with a working environment (its `.venv` with torch,
   xgboost, h5py, clearml…; [docker/requirements-cornerstone.txt](docker/requirements-cornerstone.txt) lists
-  what it needs). The SQLite database can be downloaded from the Home page.
+  what it needs). The data are downloaded from the Data page.
 - No GPU is required: every model also runs on CPU. A GPU (NVIDIA CUDA, or AMD with a ROCm build of
   torch) speeds up the PyTorch models.
 
@@ -51,12 +50,13 @@ Settings (file `gui_settings.json`, `CS_GUI_*` environment variables, or the Hom
 |---|---|---|
 | `cornerstone_root` | the importable `cornerstone` package, else `../cornerstone_db_package` | package checkout |
 | `cornerstone_python` | `<root>/.venv/bin/python`, else the GUI interpreter | interpreter used to run the steps |
-| `db_path` | `local_db_path` from `cornerstone/configs/db_config.json` | real SQLite DB |
+| `data_root` | `data_root` of `cornerstone/configs/data_config.json` (or `CORNERSTONE_DATA_ROOT`) | Parquet data store |
+| `legacy_db_path` | — | `cornerstone.sqlite` of the former dump, offered for import in the Data page |
 | `workspace` | `./workspace` | artifacts of real mode |
-| `mode` | `real` | `real` or `demo` (synthetic DB in `./workspace_demo`) |
+| `mode` | `real` | `real` or `demo` (synthetic data in `./workspace_demo`) |
 | `min_free_disk_gb` | 5 | minimum free space to start a job |
 
-Environment variables: `CS_GUI_CORNERSTONE_ROOT`, `CS_GUI_CORNERSTONE_PYTHON`, `CS_GUI_DB_PATH`,
+Environment variables: `CS_GUI_CORNERSTONE_ROOT`, `CS_GUI_CORNERSTONE_PYTHON`, `CS_GUI_DATA_ROOT`, `CS_GUI_LEGACY_DB`,
 `CS_GUI_WORKSPACE`, `CS_GUI_DEMO_WORKSPACE`, `CS_GUI_MODE`, `CS_GUI_SETTINGS_FILE`. They take precedence
 over the settings file.
 
@@ -65,10 +65,12 @@ rather than exposing the port: the GUI has no login.
 
 ## Full workflow in the GUI
 
-1. **Labeling** — snapshot of a label table already in the DB (fast) or generation with
-   `splitting_labeling` on a private DB.
-2. **Dataset → HDF5 extraction** — history window, cadence, feature version (clean/all),
-   optional subsample for quick tests.
+0. **Data** — download and update SHARP DEF/NRT (JSOC), GOES flares (NOAA SWPC) and the HARP ↔ NOAA map.
+1. **Labeling** — parametric (`cornerstone.labeling`): SHARP series, prediction threshold, flare window,
+   grid step, stratification threshold and window, time range, record quality filter, GOES calibration
+   and flare → HARP association rules. The former static tables are one preset.
+2. **Dataset → HDF5 extraction** — history window, cadence, feature set (clean/all), records used,
+   optional subsample for quick tests. The split stratifies on the stratification class.
 3. **Dataset → Filters and split** — features, missing data, time and quality filters, random or
    chronological split by Active Region, number of folds.
 4. **Model configuration** — algorithm, hyperparameters, loss, early stopping, threshold, seed.
@@ -83,7 +85,7 @@ Every form shows the configuration summary and the validation errors **before** 
 
 ```bash
 uv run python examples/run_pipeline.py                  # real mode, subsample of 600 events
-uv run python examples/run_pipeline.py --mode demo      # synthetic DB (test only)
+uv run python examples/run_pipeline.py --mode demo      # synthetic data (test only)
 uv run python examples/run_pipeline.py --model model_lstm.json
 ```
 
@@ -104,8 +106,8 @@ With Docker: `docker compose exec gui python examples/run_pipeline.py --mode dem
 
 ## Demo mode
 
-Home page → *Demo* mode → *Generate demo DB* (done automatically by the Docker image when no database is
-mounted). The database is **synthetic** (same schema as the real DB, generated values) and is only meant
+Home page → *Demo* mode → *Generate demo data* (done automatically by the Docker image on a first start
+without data). The data are **synthetic** (same layout as the real store, generated values) and are only meant
 for trying out the GUI and for the tests: every page shows a banner and demo artifacts live in a separate
 workspace. Demo results have no scientific value.
 
@@ -113,23 +115,20 @@ workspace. Demo results have no scientific value.
 
 ```bash
 uv run pytest -m "not integration"     # unit: store, validation, metrics, jobs, adapters (~3 s)
-uv run pytest -m integration           # real package on the demo DB + all pages (AppTest) (~5 min)
+uv run pytest -m integration           # real package on the demo data, whole chain (~7 min)
 ```
 
 ## Documentation
 
-- [docs/DOCKER.md](docs/DOCKER.md): Docker image, database, volumes, options.
+- [docs/DOCKER.md](docs/DOCKER.md): Docker image, data, volumes, options.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): package analysis, architecture, adapters, data leakage, limitations.
 - [docs/ARTIFACTS.md](docs/ARTIFACTS.md): format of experiments, artifacts, predictions.
 - [docs/PAGES.md](docs/PAGES.md): pages and parameters.
 
 ## Main limitations
 
-- No CME data in the database: CME sections are not available.
-- The published database has GOES flare events only for NRT HARPs: DEF labels can only be the existing
-  tables (no generation), and the DEF Active Regions plots show no flares.
+- No CME catalogue: CME sections are not available.
 - The Docker image is CPU-only.
 - Bit-for-bit reproducibility is not guaranteed for PyTorch models; commit, versions and seeds are recorded.
-- Generated labeling covers the fixed range of the package (1996–2025) and is slow.
-- The database download relies on Google Drive (through `gdown`), which can refuse large automated
-  downloads for a while: if it fails, retry later.
+- The first download of SHARP from JSOC takes hours (then updates take minutes); the published snapshot
+  relies on Google Drive (through `gdown`), which can refuse large automated downloads for a while.

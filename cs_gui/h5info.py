@@ -66,7 +66,7 @@ def summarize(path: str, max_rows_for_nan: int = 20000) -> dict:
         # NaN statistics on (a bounded number of) samples
         idx = np.arange(n) if n <= max_rows_for_nan else np.linspace(0, n - 1, max_rows_for_nan).astype(int)
         X = f["X"][np.sort(idx)] if n else np.zeros((0, t, nf))
-        attrs = {k: (v.decode() if isinstance(v, bytes) else str(v)) for k, v in f.attrs.items() if k != "quality"}
+        attrs = {k: (v.decode() if isinstance(v, bytes) else str(v)) for k, v in f.attrs.items() if k not in ("quality", "metadata")}
     names = [x for x in attrs.get("feature_names", "").split(",") if x]
     nan_ratio = (np.isnan(X).mean(axis=(0, 1)) if X.size else np.zeros(nf)).tolist()
     empty = int((np.isnan(X).all(axis=(1, 2))).sum()) if X.size else 0

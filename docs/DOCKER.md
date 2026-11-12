@@ -8,8 +8,7 @@ CPU-only Python environment with all their dependencies. Nothing else needs to b
 - [Docker](https://docs.docker.com/get-docker/) with Compose v2 (`docker compose version`).
   Docker Desktop on Windows and macOS works too.
 - About 5 GB of free disk space for the image, plus space for your experiments.
-- About 7 GB more to download the CORNERSTONE database from the GUI (1.5 GB dump + 4.3 GB database),
-  or a copy of `cornerstone.sqlite` you already have.
+- About 1 GB more for the data store (SHARP DEF/NRT, GOES events), which grows slowly.
 
 ## Quick start
 
@@ -21,37 +20,38 @@ docker compose up --build -d
 
 Open **http://localhost:8501**. The first build downloads the dependencies and takes a few minutes.
 
-Without a database the GUI starts in **demo mode** on a synthetic database, which is generated
-automatically. Every page shows a banner, and the results have no scientific value.
+Without data the GUI starts in **demo mode** on synthetic data, generated automatically. Every
+page shows a banner, and the results have no scientific value.
 
-## Using the real database
+## Using the real data
 
-### Downloading the database
+Open the **Data** page. It shows what the store contains and runs, in the background with a live log,
+one of:
 
-On the Home page, section **Real database**, click **Download the database**. The GUI runs the
-package's `Cornerstone.db_update()` in the background: it downloads the full dump from the CORNERSTONE
-Google Drive (1.5 GB), builds the SQLite database (4.3 GB) and applies the incremental updates. It takes a
-while; the log is shown live and the download can be cancelled. When it is done, click **Switch to Real
-mode**. Later, **Check for updates** downloads only the new incremental updates.
+- **Update from the sources**: downloads SHARP DEF and NRT from JSOC, the GOES flares from NOAA SWPC and
+  the HARP ↔ NOAA map. The first time this takes a few hours (SHARP); afterwards only what changed is
+  downloaded (minutes). An interrupted run resumes from the last complete file.
+- **Published snapshot**: a Parquet copy of the store published by the project (minutes), then
+  *Update from the sources* adds what is newer.
+- **Import the former database**: converts a `cornerstone.sqlite` of the former dump (about 2 minutes),
+  then *Update from the sources* brings it up to date.
 
-The database is kept in the Docker volume `db` (mounted at `/data`): it survives `docker compose down`
-and image rebuilds, and is deleted only by `docker compose down -v`.
+When the store has data, choose **Real** mode in *Home → GUI configuration*.
 
-### Using a database you already have
+The store is kept in the Docker volume `db` (mounted at `/data`, folder `datastore/`): it survives
+`docker compose down` and image rebuilds, and is deleted only by `docker compose down -v`.
+
+### Using a folder of your computer
 
 Create a `.env` file next to `docker-compose.yml`:
 
 ```bash
-CORNERSTONE_DB_DIR=/path/to/folder
-CORNERSTONE_DB_FILE=my_database.sqlite
+CORNERSTONE_DATA_DIR=/path/to/folder
 ```
 
-Then restart with `docker compose up -d` and choose **Real** mode in *Home → GUI configuration*
-(the container only starts in demo mode by itself on its first run without a database).
-
-The GUI opens the database **read-only**: only the download/update writes to that folder. To update a
-database of your own from the GUI, the folder must be writable by the container user (uid 1000, usually
-the first user of the computer).
+The store goes to `/path/to/folder/datastore`; a `cornerstone.sqlite` in that folder (or the file named by
+`CORNERSTONE_DB_FILE`) is offered for import. The folder must be writable by the container user (uid 1000,
+usually the first user of the computer).
 
 ## Day-to-day commands
 
@@ -65,12 +65,15 @@ the first user of the computer).
 
 ### Updating from an earlier version
 
-`git pull` then `docker compose up --build -d`: the database and the experiments are in volumes or
+`git pull` then `docker compose up --build -d`: the data and the experiments are in volumes or
 folders outside the image, so a rebuild keeps them (never use `docker compose down -v`, which deletes
-the volumes). Versions before the database download looked for the database in `./data` by default;
-the default is now the `db` volume. If your database is in `./data/cornerstone.sqlite` and `.env` does
-not set `CORNERSTONE_DB_DIR`, add `CORNERSTONE_DB_DIR=./data` to `.env` (plus `CORNERSTONE_DB_FILE`
-for a different file name), otherwise the GUI does not find it and starts in demo mode.
+the volumes).
+
+From a version that used the SQLite database: the database stays where it was (volume `db`, or the
+folder of `CORNERSTONE_DB_DIR`, still honoured). Open the **Data** page, tab *Import the former
+database*, run the import and then *Update from the sources*. Experiments made with the former
+labeling remain readable; new labelings use the data store. After the import the `.sqlite` file is no
+longer needed.
 
 ## Where the experiments are stored
 
@@ -89,8 +92,8 @@ docker compose cp gui:/workspace ./workspace_backup
 | Variable (in `.env`) | Default | Meaning |
 |---|---|---|
 | `CS_GUI_PORT` | `8501` | port on your computer |
-| `CORNERSTONE_DB_DIR` | `db` (Docker volume) | folder holding the database |
-| `CORNERSTONE_DB_FILE` | `cornerstone.sqlite` | database file name |
+| `CORNERSTONE_DATA_DIR` | `db` (Docker volume) | folder holding the data store (`datastore/`) |
+| `CORNERSTONE_DB_FILE` | `cornerstone.sqlite` | former SQLite database offered for import, in that folder |
 | `CORNERSTONE_REF` | `main` | branch, tag or commit of the CORNERSTONE package used at build time |
 
 To pin the package version (recommended for reproducible experiments):

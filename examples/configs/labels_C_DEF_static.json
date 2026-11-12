@@ -1,0 +1,26 @@
+{
+ "series": "DEF",
+ "threshold": "C",
+ "flare_window_hours": 24.0,
+ "step_hours": 24.0,
+ "strat_threshold": null,
+ "strat_window_hours": 24.0,
+ "start": null,
+ "end": null,
+ "quality": {
+  "require_position": true,
+  "quality_mask": null,
+  "quality_values": null,
+  "cmask_gt": null,
+  "meangbt_gt": null,
+  "max_abs_lon": null,
+  "exclude_years": []
+ },
+ "flares": {
+  "calibration": "science",
+  "peak_fallback": "start",
+  "ambiguous": "position_then_flux",
+  "position_margin_deg": 2.0,
+  "max_gap_hours": 24.0
+ }
+}

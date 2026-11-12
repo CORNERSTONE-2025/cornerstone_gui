@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from . import dbsync, termlog
+from . import datasync, termlog
 from .jobs import JobManager
 from .pipeline import Pipeline
 from .settings import Settings, load_settings, save_settings
@@ -56,14 +56,14 @@ def package_info(refresh: bool = False) -> dict | None:
 def page_header(title: str, help_text: str = "") -> Ctx:
     c = ctx()
     if c.settings.mode == "demo":
-        st.warning("**DEMO MODE** — synthetic database generated for testing: the results have NO scientific "
+        st.warning("**DEMO MODE** — synthetic data generated for testing: the results have NO scientific "
                    "value. Demo artifacts live in a separate workspace.", icon="🧪")
     st.title(title)
     if help_text:
         st.caption(help_text)
     problems = c.settings.problems()
     if problems:
-        st.error("Incomplete configuration:\n\n- " + "\n- ".join(problems) + "\n\nGo to the **Home** page to fix it.")
+        st.error("Incomplete configuration:\n\n- " + "\n- ".join(problems) + "\n\nSee the **Data** and **Home** pages.")
     return c
 
 
@@ -290,47 +290,72 @@ def job_monitor(types: list[str] | None = None) -> None:
 
 
 @st.fragment(run_every=3)
-def db_download_panel() -> None:
-    """Download / update of the real database (``Cornerstone.db_update``), auto-refresh every 3 s."""
+def data_panel() -> None:
+    """Status and update of the real data store (``python -m cornerstone.data``), refreshed every 3 s."""
+    from . import datastore
     c = ctx()
     s = c.settings
-    stt = dbsync.status(s)
+    stt = datasync.status(s)
     job = stt["job"] or {}
-    if stt["exists"]:
-        st.markdown(f"`{stt['db_path']}` · {stt['size_gb']:.1f} GB · synchronized to "
-                    f"**{stt['last_sync'] or 'unknown date'}**")
+    st.markdown(f"Store: `{stt['data_root']}`")
+    table = datastore.status(s.real_data_root)
+    if len(table):
+        st.dataframe(table.drop(columns="key"), hide_index=True, width="stretch")
     else:
-        st.markdown(f"Not downloaded yet: it will be saved to `{stt['db_path']}` "
-                    f"(about {dbsync.FULL_DOWNLOAD_GB:.0f} GB of free space needed).")
+        st.info("The store is empty. Create it below: from the sources (complete, a few hours the first "
+                "time), from the published snapshot (minutes) or from a database of the former dump.")
     if stt["running"]:
-        st.info(f"Download/update running since {job['started_at'][:19].replace('T', ' ')}: the first "
-                "download takes a while (1.5 GB from Google Drive, then the 4 GB database is built).")
-        if st.button("Cancel the download", key="db_cancel"):
-            dbsync.cancel(s)
+        st.info(f"**{job.get('action')}** running since {job['started_at'][:19].replace('T', ' ')}. "
+                "Every file is written as soon as it is complete: an interrupted run resumes from there.")
+        if st.button("Stop", key="data_cancel"):
+            datasync.cancel(s)
             st.rerun()
     else:
         if job.get("status") == "completed":
-            st.success(f"Last download/update completed ({job.get('finished_at', '')[:19].replace('T', ' ')}).")
+            st.success(f"Last run ({job.get('action')}) completed ({job.get('finished_at', '')[:19].replace('T', ' ')}).")
         elif job.get("status") in ("failed", "cancelled"):
-            st.error(f"Last download/update {job['status']}: {job.get('error')}")
-        problems = dbsync.preflight(s)
-        if problems:
-            st.warning("\n\n".join(problems))
-        label = "Check for updates" if stt["exists"] else "Download the database"
-        if st.button(label, key="db_launch", disabled=bool(problems)):
-            try:
-                dbsync.launch(s)
-            except RuntimeError as e:
-                st.error(str(e))
-            st.rerun()
-        if stt["exists"] and s.mode == "demo" and st.button("Switch to Real mode", key="db_real"):
-            s.mode = "real"
-            save_settings(s)
-            reset_ctx()
-            st.rerun(scope="app")
+            st.error(f"Last run ({job.get('action')}) {job['status']}: {job.get('error')}")
+        _data_actions(s, stt)
     if job.get("log"):
-        with st.expander("Download log", expanded=stt["running"]):
-            log_box(job["log"], key="db_update", height=300)
+        with st.expander("Log of the last run", expanded=stt["running"]):
+            log_box(job["log"], key="data_update", height=320)
+
+
+def _data_actions(s: Settings, stt: dict) -> None:
+    t_up, t_snap, t_imp = st.tabs(["Update from the sources", "Published snapshot", "Import the former database"])
+    with t_up:
+        st.caption("Incremental: only the HARP blocks still evolving (data of the last 60 days) and the "
+                   "current year of GOES events are downloaded again.")
+        src = st.multiselect("Sources", list(datasync.SOURCES), list(datasync.SOURCES),
+                             format_func=datasync.SOURCES.get, key="data_sources")
+        full = st.checkbox("Download everything again (--full)", key="data_full")
+        _launch_button(s, "update", "Update the data", sources=src, full=full, disabled=not src)
+    with t_snap:
+        url = st.text_input("Google Drive folder (empty = bootstrap_url of data_config.json)", key="data_url")
+        st.caption("A Parquet copy of the store published by the project: faster than downloading from "
+                   "JSOC. Afterwards *Update from the sources* adds what is newer.")
+        _launch_button(s, "snapshot", "Download the snapshot", url=url or None)
+    with t_imp:
+        default = s.legacy_db_path or ""
+        path = st.text_input("Former SQLite database (cornerstone.sqlite)", default, key="data_sqlite")
+        st.caption("Converts SHARP DEF/NRT and the reference tables of the former dump into the store "
+                   "(about 2 minutes); then *Update from the sources* brings them up to date.")
+        ok = bool(path) and Path(path).exists()
+        if path and not ok:
+            st.warning(f"File not found: {path}")
+        _launch_button(s, "import", "Import", sqlite=path, disabled=not ok)
+
+
+def _launch_button(s: Settings, action: str, label: str, disabled: bool = False, **kw) -> None:
+    problems = datasync.preflight(s, action)
+    if problems:
+        st.warning("\n\n".join(problems))
+    if st.button(label, key=f"data_launch_{action}", disabled=disabled or bool(problems), type="primary"):
+        try:
+            datasync.launch(s, action, **kw)
+        except (RuntimeError, ValueError) as e:
+            st.error(str(e))
+        st.rerun()
 
 
 def artifact_status_box(m: dict) -> None:

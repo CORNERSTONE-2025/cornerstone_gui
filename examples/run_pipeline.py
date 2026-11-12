@@ -1,7 +1,7 @@
 """Reproducible example pipeline without the GUI (same backend the GUI uses).
 
     python examples/run_pipeline.py                       # real mode, configs in examples/configs
-    python examples/run_pipeline.py --mode demo           # synthetic demo database (no scientific value)
+    python examples/run_pipeline.py --mode demo           # synthetic demo data (no scientific value)
     python examples/run_pipeline.py --model model_lstm.json --training training.json
 
 Every step creates a new artifact in the workspace (nothing is overwritten); the final lines print
@@ -16,7 +16,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from cs_gui.demo import build_demo_db  # noqa: E402
 from cs_gui.jobs import JobManager  # noqa: E402
 from cs_gui.pipeline import Pipeline  # noqa: E402
 from cs_gui.settings import load_settings  # noqa: E402
@@ -32,7 +31,7 @@ def load(name):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", choices=["real", "demo"], default=None)
-    ap.add_argument("--labels", default="labels_existing_Cplus_DEF.json")
+    ap.add_argument("--labels", default="labels_C_DEF_static.json")
     ap.add_argument("--dataset", default="dataset_clean_w24h_subsample.json")
     ap.add_argument("--split", default="split_random.json")
     ap.add_argument("--model", default="model_xgboost.json")
@@ -43,8 +42,9 @@ def main():
     s = load_settings()
     if a.mode:
         s.mode = a.mode
-    if s.mode == "demo" and not s.demo_db_path.exists():
-        print("Creating the demo DB (synthetic):", build_demo_db(s.demo_db_path))
+    if s.mode == "demo" and not s.has_data():
+        from cs_gui.demo import build_demo_store     # needs the package (cornerstone.data)
+        print("Creating the demo data (synthetic):", build_demo_store(s.demo_data_root))
     if s.problems():
         sys.exit("Incomplete configuration:\n- " + "\n- ".join(s.problems()))
     store = ArtifactStore(s.active_workspace)
@@ -62,8 +62,6 @@ def main():
         return m
 
     lab_cfg = load(a.labels)
-    if s.mode == "demo":
-        lab_cfg["source"] = "generate"           # the demo DB has no pre-computed label tables
     lab = run(pl.create_labels("Example: labels", lab_cfg))
     ds_cfg = load(a.dataset)
     if ds_cfg.get("subsample") and ds_cfg["subsample_size"] > lab["summary"]["n_rows"]:

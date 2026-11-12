@@ -73,9 +73,10 @@ def test_preflight_refuses_completed_and_bad_settings(store, settings, tmp_path)
 def test_relative_settings_paths_are_absolute(tmp_path, monkeypatch):
     from cs_gui.settings import PROJECT_ROOT, load_settings
     f = tmp_path / "gui_settings.json"
-    f.write_text('{"workspace": "workspace", "demo_workspace": "workspace_demo", "db_path": "data/x.sqlite"}')
-    for env in ("CS_GUI_WORKSPACE", "CS_GUI_DEMO_WORKSPACE", "CS_GUI_DB_PATH"):
+    f.write_text('{"workspace": "workspace", "demo_workspace": "workspace_demo", "data_root": "data/store", '
+                 '"db_path": "old.sqlite"}')                          # db_path: setting of older versions, ignored
+    for env in ("CS_GUI_WORKSPACE", "CS_GUI_DEMO_WORKSPACE", "CS_GUI_DATA_ROOT"):
         monkeypatch.delenv(env, raising=False)
     s = load_settings(f)
     assert s.workspace == str(PROJECT_ROOT / "workspace")
-    assert s.db_path == str(PROJECT_ROOT / "data" / "x.sqlite")
+    assert s.data_root == str(PROJECT_ROOT / "data" / "store") == s.real_data_root

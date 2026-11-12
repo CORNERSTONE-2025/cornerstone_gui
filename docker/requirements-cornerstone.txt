@@ -10,6 +10,7 @@ scikit-learn==1.7.2
 xgboost-cpu==3.1.2
 sktime==0.39.0
 h5py==3.15.1
+pyarrow==25.0.1
 matplotlib==3.10.7
 sqlalchemy==2.0.45
 clearml==2.0.2

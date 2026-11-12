@@ -1,5 +1,5 @@
 """End-to-end tests running the REAL CORNERSTONE package (through the runner) on the synthetic
-demo database. Slow (a few minutes): ``pytest -m integration``."""
+demo data store. Slow (a few minutes): ``pytest -m integration``."""
 import copy
 import json
 import os
@@ -10,9 +10,9 @@ import pandas as pd
 import pytest
 
 from conftest import CORNERSTONE_ROOT, cornerstone_available, dump, run_and_wait
-from cs_gui.demo import build_demo_db
+from cs_gui.demo import build_demo_store
 from cs_gui.jobs import JobManager
-from cs_gui.pipeline import DEFAULT_TRAINING_CONFIG, Pipeline, default_split_config
+from cs_gui.pipeline import DEFAULT_TRAINING_CONFIG, Pipeline, default_label_config, default_split_config
 from cs_gui.settings import Settings
 from cs_gui.store import ArtifactStore
 
@@ -25,15 +25,14 @@ def demo(tmp_path_factory):
     ws = tmp_path_factory.mktemp("demo_ws")
     s = Settings(cornerstone_root=CORNERSTONE_ROOT,
                  demo_workspace=str(ws), mode="demo", min_free_disk_gb=0.1)
-    build_demo_db(s.demo_db_path, n_harps=30, seed=3)
+    build_demo_store(s.demo_data_root, n_harps=30, seed=3)
     store = ArtifactStore(s.active_workspace)
     jobs, pl = JobManager(s, store), Pipeline(s, store)
     out = {"settings": s, "store": store, "jobs": jobs, "pl": pl}
-    lab = run_and_wait(jobs, store, pl.create_labels("L", {"source": "generate", "table_type": "DEF",
-                                                           "label_type": "Cplus", "delta_hours": 24})["id"])
+    lab = run_and_wait(jobs, store, pl.create_labels("L", default_label_config("DEF", "C", strat_window_hours=24.0))["id"])
     assert lab["status"] == "completed", dump(lab)
     ds = run_and_wait(jobs, store, pl.create_dataset("D", lab["id"], {
-        "data_version": "clean", "window_hours": 24, "buffer_minutes": 6, "sampling_interval": 12,
+        "features": "clean", "quality_source": "feature_set", "window_hours": 24, "sampling_minutes": 12,
         "subsample": False, "subsample_size": 0, "random_seed": 42})["id"])
     assert ds["status"] == "completed", dump(ds)
     cfg = default_split_config(s)
@@ -75,11 +74,14 @@ def test_pipeline_outputs(demo):
     assert prov["cornerstone"]["commit"] and "torch" in prov["packages"]
 
 
-def test_shared_db_is_never_modified(demo):
+def test_data_store_is_never_modified(demo):
     s = demo["settings"]
-    import sqlite3
-    tables = [r[0] for r in sqlite3.connect(s.demo_db_path).execute("SELECT name FROM sqlite_master")]
-    assert not any(t.startswith("DF_") for t in tables)   # labeling wrote only into the artifact DB
+    files = sorted(p.relative_to(s.demo_data_root) for p in s.demo_data_root.rglob("*") if p.is_file())
+    assert all(str(f).startswith(("raw/", "manifest.json", "DEMO_INFO")) for f in files), files
+    lab = demo["store"].path(demo["lab"]["id"])
+    assert (lab / "labels.parquet").exists() and (lab / "flares.parquet").exists()   # outputs in the artifact
+    ds = demo["ds"]["summary"]
+    assert ds["label_key"] == "Cplus_delta24" and set(ds["strat_counts"]) <= {"C", "M", "X", "NO1", "NO2", "NO3", "NO4"}
 
 
 def test_failure_is_recorded_and_never_completed(demo):

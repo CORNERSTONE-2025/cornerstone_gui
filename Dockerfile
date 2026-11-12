@@ -45,7 +45,9 @@ ENV CS_GUI_CORNERSTONE_ROOT=/opt/cornerstone \
     CS_GUI_WORKSPACE=/workspace/real \
     CS_GUI_DEMO_WORKSPACE=/workspace/demo \
     CS_GUI_SETTINGS_FILE=/workspace/gui_settings.json \
-    CS_GUI_DB_PATH=/data/cornerstone.sqlite \
+    CS_GUI_DATA_ROOT=/data/datastore \
+    CORNERSTONE_DATA_ROOT=/data/datastore \
+    CS_GUI_LEGACY_DB=/data/cornerstone.sqlite \
     MPLBACKEND=Agg \
     CLEARML_OFFLINE_MODE=1
 

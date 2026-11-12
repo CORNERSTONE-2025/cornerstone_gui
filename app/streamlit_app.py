@@ -16,6 +16,7 @@ P = ROOT / "app" / "views"        # not "pages/": Streamlit would also run those
 pages = {
     "Project": [
         st.Page(P / "home.py", title="Home and status", icon="🏠", default=True),
+        st.Page(P / "data.py", title="Data", icon="💾"),
     ],
     "Pipeline": [
         st.Page(P / "labeling.py", title="Labeling", icon="🏷️"),

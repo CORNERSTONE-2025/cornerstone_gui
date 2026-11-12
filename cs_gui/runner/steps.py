@@ -8,7 +8,6 @@ from __future__ import annotations
 import glob
 import json
 import os
-import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,7 +28,7 @@ SPLIT_PREFIX = "split"          # EXPERIMENT_NAME passed to create_dataset_split
 class Ctx:
     store: ArtifactStore
     m: dict
-    db: str
+    data_root: str
     mode: str
     cornerstone_root: str
 
@@ -48,10 +47,11 @@ class Ctx:
         return self.store.path(self.m["parents"][role])
 
 
-def _cornerstone(ctx: Ctx, db: str | None = None, output_folder: Path | None = None):
+def _cornerstone(ctx: Ctx, output_folder: Path | None = None):
+    """``Cornerstone`` object for the split/training/test API (no database is used)."""
     from cornerstone import Cornerstone
     out = output_folder or (ctx.dir / "_cornerstone_tmp")
-    return Cornerstone({"local_db_path": db or ctx.db}, output_folder=str(out), project_name="cornerstone-gui")
+    return Cornerstone({}, output_folder=str(out), project_name="cornerstone-gui")
 
 
 def _rmdir_if_empty(p: Path) -> None:
@@ -62,103 +62,109 @@ def _rmdir_if_empty(p: Path) -> None:
 
 
 # ======================================================================================
-# 1. Labeling
+# 1. Labeling (cornerstone.labeling on the Parquet store)
 # ======================================================================================
-def summarize_labels(db: Path, table: str) -> dict:
+LABELS_FILE, FLARES_FILE, LABELS_META = "labels.parquet", "flares.parquet", "labels_meta.json"
+CSV_MAX_ROWS = 300_000
+
+
+def summarize_labels(df) -> dict:
     import pandas as pd
-    con = sqlite3.connect(db)
-    try:
-        df = pd.read_sql_query(f'SELECT t_X, HARPn, label, label_u FROM "{table}"', con)
-    finally:
-        con.close()
-    t = pd.to_datetime(df["t_X"], errors="coerce")
+    t = pd.to_datetime(df["t_X"], utc=True)
     yes = df["label"] == "YES"
     per_year = df.assign(year=t.dt.year, yes=yes).groupby("year")["yes"].agg(["sum", "count"])
     return {
-        "table": table,
         "n_rows": int(len(df)),
-        "n_active_regions": int(df["HARPn"].nunique()),
-        "t_X_start": str(t.min()), "t_X_end": str(t.max()),
+        "n_active_regions": int(df["HARPNUM"].nunique()),
+        "t_X_start": str(t.min()) if len(df) else "", "t_X_end": str(t.max()) if len(df) else "",
         "label_counts": {str(k): int(v) for k, v in df["label"].value_counts().items()},
-        "label_u_counts": {str(k): int(v) for k, v in df["label_u"].value_counts().items()},
+        "strat_counts": {str(k): int(v) for k, v in df["strat_class"].value_counts().items()},
         "positive_rate": float(yes.mean()) if len(df) else 0.0,
         "per_year": {str(int(y)): {"YES": int(r["sum"]), "n": int(r["count"])} for y, r in per_year.iterrows()},
     }
 
 
+def label_config(c: dict):
+    from cornerstone.labeling import LabelConfig
+    return LabelConfig(threshold=c["threshold"], flare_window_hours=float(c["flare_window_hours"]),
+                       step_hours=float(c["step_hours"]), strat_threshold=c.get("strat_threshold"),
+                       strat_window_hours=c.get("strat_window_hours"), start=c.get("start") or None,
+                       end=c.get("end") or None)
+
+
+def quality_filter(q: dict):
+    from cornerstone.processing import QualityFilter
+    return QualityFilter(**{**q, "exclude_years": tuple(q.get("exclude_years") or ()),
+                            "quality_values": None if q.get("quality_values") is None else tuple(q["quality_values"])})
+
+
 def step_labels(ctx: Ctx) -> dict:
+    from cornerstone.data import DataStore
+    from cornerstone.labeling import labels_and_flares
+    from cornerstone.processing import FlareConfig
     c = ctx.config
-    shtyp, cls, delta = c["table_type"], c["label_type"], int(c["delta_hours"])
-    table = adapters.label_table_name(shtyp, cls, delta)
-    out_db = ctx.dir / "labels.sqlite"
-    if c["source"] == "existing":
-        print(f"[cs-gui] snapshot of existing label table {table} (main DB opened read-only)")
-        info = {"copied_rows": adapters.snapshot_label_table(ctx.db, str(out_db), table)}
-    else:
-        print(f"[cs-gui] preparing a private labeling DB from {ctx.db} (read-only)")
-        info = adapters.build_labeling_db(ctx.db, str(out_db), shtyp)
-        cs = _cornerstone(ctx, db=str(out_db))
-        cs.splitting_labeling(shtyp=shtyp, class0=cls, delta_hours=str(delta), db_type="sqlite", save_csv=False)
-        con = sqlite3.connect(out_db)
-        con.execute(f'DROP TABLE IF EXISTS "SHARPC_all_{shtyp}"')     # helper table only
-        con.commit()
-        con.execute("VACUUM")
-        con.close()
-        _rmdir_if_empty(ctx.dir / "_cornerstone_tmp")
-    summary = summarize_labels(out_db, table)
-    summary.update(info)
-    summary["labels_db"] = "labels.sqlite"
-    # open, interoperable copy
-    import pandas as pd
-    con = sqlite3.connect(out_db)
-    pd.read_sql_query(f'SELECT * FROM "{table}"', con).to_csv(ctx.dir / "labels.csv", index=False)
-    con.close()
-    return summary
+    store = DataStore(ctx.data_root)
+    print(f"[cs-gui] labeling {c['series']} from the store {ctx.data_root}")
+    labels, flares, meta = labels_and_flares(store, c["series"], label_config(c), quality_filter(c["quality"]),
+                                             FlareConfig(**c["flares"]))
+    if not len(labels):
+        raise RuntimeError("No (t_X, HARP) pair: no HARP observed in the chosen time range")
+    labels.to_parquet(ctx.dir / LABELS_FILE, index=False)
+    flares.to_parquet(ctx.dir / FLARES_FILE, index=False)
+    (ctx.dir / LABELS_META).write_text(json.dumps(meta, indent=2, default=str))
+    if len(labels) <= CSV_MAX_ROWS:            # open, interoperable copy
+        labels.to_csv(ctx.dir / "labels.csv", index=False)
+    s = summarize_labels(labels)
+    s.update(label_key=_label_key(c), flare_association=meta["flare_association"],
+             sharp_data_until=meta["sharp_data_until"], data=meta["data"])
+    print(f"[cs-gui] {s['n_rows']:,} rows, {s['n_active_regions']} HARPs, labels {s['label_counts']}")
+    return s
+
+
+def _label_key(c: dict) -> str:
+    return f"{c['threshold']}plus_delta{float(c['flare_window_hours']):g}"
 
 
 # ======================================================================================
-# 2. HDF5 extraction
+# 2. HDF5 extraction (cornerstone.dataset on the Parquet store)
 # ======================================================================================
+DATASET_FILE = "dataset.h5"
+
+
 def step_dataset(ctx: Ctx) -> dict:
+    import pandas as pd
+    from cornerstone.data import DataStore
+    from cornerstone.dataset import build_dataset
     lab = ctx.parent("labels")
     lc, c = lab["config"], ctx.config
-    shtyp, cls = lc["table_type"], lc["label_type"]
-    expected = adapters.label_table_name(shtyp, cls, c["window_hours"])   # name built by the package
-    shim = adapters.readonly_sqlite_module(ctx.db, labels_db=str(ctx.parent_dir("labels") / "labels.sqlite"),
-                                           view_map={expected: lab["summary"]["table"]})
-    adapters.patch_cornerstone_sqlite(shim)
-    cs = _cornerstone(ctx, output_folder=ctx.dir)
-    cs.create_hdf5_from_db(
-        label_type=cls, data_version=c["data_version"], table_type=shtyp,
-        window_hours=int(c["window_hours"]), buffer_minutes=int(c["buffer_minutes"]),
-        sampling_interval=int(c["sampling_interval"]),
-        test_mode=bool(c.get("subsample")), test_size=int(c.get("subsample_size") or 0),
-        random_seed=int(c.get("random_seed", 42)), db_type="sqlite",
-    )
-    files = sorted(ctx.dir.glob("*.h5"))
-    if not files:
-        raise RuntimeError("create_hdf5_from_db did not produce any HDF5 file")
-    h5 = files[0]
+    labels = pd.read_parquet(ctx.parent_dir("labels") / LABELS_FILE)
+    meta = json.loads((ctx.parent_dir("labels") / LABELS_META).read_text())
+    quality = quality_filter(lc["quality"]) if c["quality_source"] == "labels" else None
+    h5 = ctx.dir / DATASET_FILE
+    built = build_dataset(DataStore(ctx.data_root), lc["series"], labels, h5, features=c["features"],
+                          quality=quality, window_hours=int(c["window_hours"]),
+                          sampling_minutes=int(c["sampling_minutes"]), label_meta=meta,
+                          max_samples=int(c["subsample_size"]) if c.get("subsample") else None,
+                          seed=int(c.get("random_seed", 42)))
     s = h5info.summarize(str(h5))
     if s["n_samples"] == 0:
-        raise RuntimeError("The extracted dataset is empty: no event has data in the database")
-    s["h5_file"] = h5.name
-    s["label_key"] = f"{cls}_delta{c['window_hours']}"
-    s["label_horizon_hours"] = int(lc["delta_hours"])
-    s["n_label_events"] = lab["summary"]["n_rows"] if not c.get("subsample") else int(c["subsample_size"])
-    miss = ctx.dir / "missing_data_log.csv"
+        raise RuntimeError("The extracted dataset is empty: no labeled pair has records in its window")
+    s.update(h5_file=DATASET_FILE, label_key=built["label_name"], label_horizon_hours=lc["flare_window_hours"],
+             n_label_events=built["counts"]["label_rows"], n_excluded_events=built["counts"]["missing"],
+             quality_filter=built["quality_filter"], strat_counts=built["counts"]["strat_class"])
+    miss = h5.with_suffix(".missing.csv")
     if miss.exists():
-        import pandas as pd
         md = pd.read_csv(miss)
-        s["n_excluded_events"] = int(len(md))
-        s["excluded_reasons"] = {str(k): int(v) for k, v in md["reason"].value_counts().items()} if "reason" in md else {}
+        s["excluded_reasons"] = {str(k): int(v) for k, v in md["reason"].value_counts().items()}
     return s
 
 
 # ======================================================================================
 # 3. Preprocessing + split
 # ======================================================================================
-LABEL_SHORT = {"Cplus": "C+", "Mplus": "M+", "Xplus": "X+"}
+def _label_short(label_type: str) -> str:
+    """``Mplus`` -> ``M+`` (task name of the package results)."""
+    return label_type[:-4] + "+" if label_type.endswith("plus") else label_type
 
 
 def _split_files(split_dir: Path) -> dict[str, Path]:
@@ -231,7 +237,7 @@ def step_split(ctx: Ctx) -> dict:
         "n_features": first["n_features"],
         "timesteps": first["timesteps"],
         "label_key": ds["summary"]["label_key"],
-        "task_name": LABEL_SHORT.get(label_type, label_type),
+        "task_name": _label_short(label_type),
         "n_samples_input": ds["summary"]["n_samples"],
         "n_samples_kept": kept,
         "n_samples_excluded": ds["summary"]["n_samples"] - kept,

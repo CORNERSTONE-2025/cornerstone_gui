@@ -94,7 +94,7 @@ class JobManager:
         log = self.dir / f"{job_id}.log"
         cmd = [self.settings.python, "-m", "cs_gui.runner",
                "--workspace", str(self.store.workspace),
-               "--db", self.settings.active_db_path,
+               "--data-root", self.settings.active_data_root,
                "--mode", self.settings.mode,
                "--job", job_id, *artifact_ids]
         for aid in artifact_ids:

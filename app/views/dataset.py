@@ -5,7 +5,7 @@ import plotly.express as px
 import streamlit as st
 
 from cs_gui import ui
-from cs_gui.pipeline import (CMASK_STRATEGIES, DATA_VERSIONS, MISSINGNESS_MODES, TEMPORAL_FILTER_MODES,
+from cs_gui.pipeline import (CMASK_STRATEGIES, FEATURE_SETS, MISSINGNESS_MODES, TEMPORAL_FILTER_MODES,
                              default_split_config, validate_dataset, validate_split)
 
 c = ui.page_header("Dataset creation",
@@ -19,35 +19,34 @@ with t_ext:
     lab_id = ui.artifact_picker("Input labels", "labels", key="ds_labels")
     if lab_id:
         lab = c.store.get(lab_id)
-        st.caption(f"{lab['summary']['n_rows']:,} events · {lab['config']['table_type']} · "
-                   f"{lab['config']['label_type']} · Δ={lab['config']['delta_hours']}h")
+        lc = lab["config"]
+        st.caption(f"{lab['summary']['n_rows']:,} labeled pairs · {lc.get('series')} · S_p {lc.get('threshold')} · "
+                   f"W={lc.get('flare_window_hours')}h · Δ={lc.get('step_hours')}h")
         g1, g2 = st.columns(2)
         with g1:
             st.markdown("**HMI/SHARP features**")
-            dv = st.radio("Feature table version (data_version)", list(DATA_VERSIONS),
-                          format_func=DATA_VERSIONS.get)
+            fs = st.radio("Feature set", list(FEATURE_SETS), format_func=FEATURE_SETS.get)
+            qs = st.radio("Records used in the windows", ["feature_set", "labels"],
+                          format_func={"feature_set": "default of the feature set (clean: former SHARPC_clean "
+                                                      "selection; all: every record with a position)",
+                                       "labels": "the quality filter of the labels"}.get)
             st.caption("Individual features are selected in step 2 (filters and split).")
         with g2:
             st.markdown("**Time sampling**")
             wh = st.number_input("History window before t_X (window_hours)", 1, 240, 24)
-            bm = st.number_input("Margin around t_X in minutes (buffer_minutes)", 0, 120, 6)
-            si = st.number_input("Sampling step in minutes (sampling_interval)", 1, 120, 12,
+            si = st.number_input("Sampling step in minutes", 1, 120, 12,
                                  help="T_OBS is rounded to this step (the SHARP cadence is 12 min).")
-            st.caption(f"Expected timesteps per sample ≈ {int(wh * 60 / si) + 1}")
-        if int(wh) != int(lab["config"]["delta_hours"]):
-            st.info(f"Note: the package names the label in the HDF5 file after window_hours "
-                    f"(`{lab['config']['label_type']}_delta{wh}`), while the forecast horizon of the labels "
-                    f"stays Δ={lab['config']['delta_hours']}h. The GUI records both values.")
-        sub = st.checkbox("Random subsample of events (for quick tests only — package test_mode)")
-        ssize = st.number_input("Number of events", 1, int(lab["summary"]["n_rows"]), min(500, int(lab["summary"]["n_rows"])),
+            st.caption(f"Timesteps per sample: {int(wh * 60 / si) + 1}")
+        sub = st.checkbox("Random subsample of the labeled pairs (for quick tests only)")
+        ssize = st.number_input("Number of pairs", 1, int(lab["summary"]["n_rows"]), min(500, int(lab["summary"]["n_rows"])),
                                 disabled=not sub)
         seed = st.number_input("Subsampling seed", 0, 2**31 - 1, 42, disabled=not sub)
-        name = st.text_input("Name", f"Dataset {lab['config']['label_type']} {dv} w{wh}h" + (f" (sub {ssize})" if sub else ""))
+        name = st.text_input("Name", f"Dataset {lc.get('threshold')} {lc.get('series')} {fs} w{wh}h"
+                             + (f" (sub {ssize})" if sub else ""))
         desc = st.text_area("Description", "", key="ds_desc", height=70)
-        cfg = {"data_version": dv, "window_hours": int(wh), "buffer_minutes": int(bm), "sampling_interval": int(si),
+        cfg = {"features": fs, "quality_source": qs, "window_hours": int(wh), "sampling_minutes": int(si),
                "subsample": sub, "subsample_size": int(ssize) if sub else 0, "random_seed": int(seed)}
-        ui.config_summary("extraction", cfg, {"label": lab_id,
-                                              "feature table": f"SHARPC_{dv}_{lab['config']['table_type']}"})
+        ui.config_summary("extraction", cfg, {"labels": lab_id, "HDF5 label name": lab["summary"].get("label_key")})
         if ui.show_errors(validate_dataset(cfg, lab, c.settings)) and st.button("Create and run extraction", type="primary"):
             ui.create_and_launch(lambda: c.pipeline.create_dataset(name, lab_id, cfg, desc))
     ui.job_monitor(["dataset"])
@@ -172,7 +171,7 @@ with t_list:
         sel = ui.artifact_list("dataset", lambda m: {
             "samples": m["summary"].get("n_samples"), "features": m["summary"].get("n_features"),
             "AR": m["summary"].get("n_active_regions"), "% YES": round(100 * m["summary"].get("positive_rate", 0), 2),
-            "subsample": m["config"].get("subsample")}, key="dsl")
+            "features": m["config"].get("features"), "subsample": m["config"].get("subsample")}, key="dsl")
     else:
         sel = ui.artifact_list("split", lambda m: {
             "strategy": m["config"].get("SPLITTING_STRATEGY"), "folds": m["config"].get("N_FOLDS"),
@@ -187,12 +186,15 @@ with t_list:
             k[1].metric("Features", s["n_features"])
             k[2].metric("Active Regions", s["n_active_regions"])
             k[3].metric("Positives", f"{100 * s['positive_rate']:.2f}%")
-            k[4].metric("Excluded events (no data)", s.get("n_excluded_events", 0))
+            k[4].metric("Pairs without data (excluded)", f"{s.get('n_excluded_events', 0):,}")
             if s.get("n_positive", 1) == 0:
                 st.error("This dataset contains **no positive (YES) sample**: no model can be trained on it. "
                          "Extract more events (no subsample or a larger one) or use a more frequent flare class.")
             st.markdown(f"Time range: **{s['time_start']} → {s['time_end']}** · timesteps {s['timesteps']}"
-                        f" · label horizon Δ={s.get('label_horizon_hours')}h")
+                        f" · flare window W={s.get('label_horizon_hours')}h · label `{s.get('label_key')}`")
+            if s.get("strat_counts"):
+                st.caption("Stratification classes (used by the split): " +
+                           ", ".join(f"{k} {v:,}" for k, v in sorted(s["strat_counts"].items())))
             c1, c2 = st.columns(2)
             cc = pd.DataFrame({"class": list(s["class_counts"]), "n": list(s["class_counts"].values())})
             c1.plotly_chart(px.bar(cc, x="class", y="n", title="Class distribution"), width="stretch")

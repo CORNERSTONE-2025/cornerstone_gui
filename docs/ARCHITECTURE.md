@@ -8,23 +8,22 @@ Analysis made on commit `897a662` (branch `main` of CORNERSTONE-2025). The GUI d
 
 | Method | What it does | Input → output |
 |---|---|---|
-| `db_update()` | Syncs the local DB with remote dumps on Google Drive | network → local SQLite |
-| `splitting_labeling(shtyp, class0, delta_hours, db_type, save_csv)` | Labels per (t_X, HARP) counting GOES flares before/after t_X | tables `SHARPC_all_*`, `NOAA_SHARPC_*_AR` → table `DF_<shtyp>_<class0>_delta<h>_three_classes` (**appended** to the DB) |
-| `create_hdf5_from_db(label_type, data_version, table_type, window_hours, buffer_minutes, sampling_interval, test_mode, test_size, random_seed, db_type)` | SHARP time series in the `window_hours` before every t_X | labels + `SHARPC_<version>_<type>` → HDF5 + `missing_data_log.csv` |
+| `python -m cornerstone.data update / bootstrap-*` (`cornerstone.data`) | Download/update of the Parquet store from JSOC and NOAA SWPC, or creation from the snapshot / former dump | network → `<data_root>/raw/**.parquet` + `manifest.json` |
+| `cornerstone.labeling.labels_and_flares(store, series, LabelConfig, QualityFilter, FlareConfig)` | Parametric labels per (t_X, HARP): prediction label YES/NO1–NO4 and stratification class | store → labels, flare → HARP association, metadata |
+| `cornerstone.dataset.build_dataset(store, series, labels, path, features, quality, window_hours, sampling_minutes, …)` | SHARP time series in the `window_hours` before every t_X | store + labels → HDF5 (`label_<name>`, `label_u_<name>`) + `*.missing.csv` |
 | `create_dataset_splits(config)` | Feature selection, missing-data/time/CMASK filters, random or chronological split with k-fold grouped by HARP | HDF5 → `splits/*_cv_k_{train,val}.h5`, `*_test.h5`, plots, config |
 | `train_models(train_config_path)` | Cross-validation for every window (3h/6h/12h/24h) | split + JSON → per-fold models, JSON metrics, plots |
 | `test_model(test_config_path)` | Evaluation of the `_best` model on the test set | models → metrics (ClearML log only) |
 
-### Data (SQLite)
+### Data (Parquet store, `cornerstone.data`)
 
-- `SHARPC_clean_{DEF,NRT}` (17 normalized features `_N1/_N2`) and `SHARPC_all_{DEF,NRT}` (22 features): 12 min cadence.
-- `NOAA_SHARPC_{DEF,NRT}_AR`: GOES XRA flares associated with the HARPs (`fflux` in W/m², `part1` = class).
-  The **published** database has a single `NOAA_SHARP_AR` instead, whose events are associated to the
-  **NRT** HARP numbers (DEF and NRT HARPs are numbered differently): the GUI uses it for NRT and states
-  that DEF has no flare events (no DEF label generation, no flares on the DEF Active Regions plots).
-- `DF_*_three_classes`: labels `YES`/`NO1..NO4`, `label_u` = flare class (C/M/X). In the published
-  database they are views on the `DF_*_three_classes_unified` tables; snapshots copy them as tables.
-- **CME: no table.** The package only handles flares; the GUI states it and does not simulate CME data.
+- `raw/sharp/{DEF,NRT}`: every SHARP record as published by JSOC (28 keywords, 12 min cadence, UTC).
+  Which records are used (former `SHARPC_all` / `SHARPC_clean` selections, or custom) is a parameter
+  of labeling and dataset (`QualityFilter`); the `_N1/_N2` features are computed on the fly.
+- `raw/goes`: GOES X-ray events from the NOAA SWPC edited reports (2010→), flux as reported; the
+  calibration (science scale by default) and the flare → HARP association are labeling parameters
+  (DEF: JSOC HARP ↔ NOAA map; NRT: `NOAA_ARS` keyword).
+- **CME: no catalogue.** The package only handles flares; the GUI states it and does not simulate CME data.
 
 ### Models (`cornerstone.ml`)
 
@@ -42,15 +41,12 @@ Analysis made on commit `897a662` (branch `main` of CORNERSTONE-2025). The GUI d
 
 | Gap | Handling |
 |---|---|
-| `splitting_labeling` **appends** to the shared DB (re-running duplicates the rows) and writes a CSV in the cwd | Labeling on a **private DB of the artifact** (adapter, §3) |
-| `create_hdf5_from_db` reads labels and features from the same DB | Main DB opened **read-only** + artifact labels mounted as a temporary view |
 | The JSON `MODEL_CONFIG_OVERRIDES` are overwritten by `MODEL_CONFIGS` in `ModelManager.create_model` | The runner updates `MODEL_CONFIGS` in its own process |
 | `train_models` requires the dataset to be registered in `AVAILABLE_DATASETS` | The runner registers the artifact split |
 | No seed set during training | The runner sets the python/numpy/torch seeds (recorded in the config) |
 | PyTorch models: the `*_best.pt` required by `run_test` is never saved | Copy of the `best_fold` chosen by the package (recorded in the manifest) |
 | `run_test`: fixed 0.5 threshold for PT, corrupted return value (reassigns `test_metrics` in the loop), no per-sample predictions | GUI inference built from the package building blocks (`FlareHDF5Dataset`, `ModelManager`, `collect_logits`, `compute_metrics`), explicit threshold, saved predictions |
 | `calibration.kind` key in `train_config.json` ignored (the code reads `type`) | The GUI writes `type` and points it out |
-| Fixed labeling date range (1996–2025) | Documented; cannot be changed without changing the package |
 | ROCKET/MINIROCKET call `cupy._default_memory_pool.free_all_blocks()`, which fails without an NVIDIA GPU | `cupy_cpu_fallback` replaces the pool with a no-op when no CUDA device is found |
 | ONEFITSALL builds its layers on the first forward pass, so a fresh model cannot load its weights (`run_test` fails too) | GUI inference runs one batch through the model before `load_state_dict` |
 | No CME data | Stated in the GUI; nothing simulated |
@@ -62,12 +58,12 @@ Analysis made on commit `897a662` (branch `main` of CORNERSTONE-2025). The GUI d
 │ app/views/*.py  ── cs_gui.ui (components) ── cs_gui.pipeline (validation, variants,        │
 │                                               reproduction) ── cs_gui.store (artifacts)     │
 │                                               cs_gui.jobs (background processes)            │
-│                                               cs_gui.db (read-only SQLite), metrics, h5info │
+│                                    cs_gui.datastore (read-only Parquet), metrics, h5info │
 └──────────────────────────────────┬─────────────────────────────────────────────────────────┘
                                    │ subprocess (own process group, log to file)
 ┌──────────────────────────────────▼──────── CORNERSTONE environment (torch, xgboost, …) ────┐
 │ python -m cs_gui.runner  ── steps.py (one step per artifact type)                          │
-│ python -m cs_gui.dbsync  ── Cornerstone.db_update() (database download/update)             │
+│ python -m cornerstone.data ── data download/update (cs_gui.datasync, Data page)            │
 │                          ── adapters.py (integration without modifying the package)        │
 │                          ── cornerstone.Cornerstone / cornerstone.ml.*                     │
 └────────────────────────────────────────────────────────────────────────────────────────────┘
@@ -92,16 +88,12 @@ Choices:
 
 ## 3. Adapters (`cs_gui/runner/adapters.py`)
 
-1. `readonly_sqlite_module`: replaces `cornerstone.cornerstone.sqlite3` in the runner process. The main DB
-   is opened with `mode=ro` (writes are impossible); the artifact labels DB is `ATTACH`ed and a
-   `TEMP VIEW` with the name expected by the package takes precedence over the table of the same name in the main DB.
-2. `build_labeling_db`: private DB with a copy of the flare events as `NOAA_SHARPC_<t>_AR` (from `NOAA_SHARP_AR` for NRT
-   in the published database) and, for `SHARPC_all_<t>`, only the first
-   and last `T_OBS` of every HARP. The query used by `splitting_labeling`
-   (`SELECT HARPNUM, MIN(T_OBS), MAX(T_OBS) … GROUP BY HARPNUM`) gives the same result (automated test).
-3. `apply_model_overrides`, `register_dataset`, `set_device`, `set_seeds`: in-process configuration.
-4. `make_best_pt_models`: copies `*_fold{best_fold}.pt` → `*_best.pt`.
-5. `cupy_cpu_fallback`: no-op cupy memory pool when no CUDA device is available (ROCKET/MINIROCKET on CPU).
+Labeling and dataset call the package data modules directly (no adapter): they read the store and
+write only into the artifact folder.
+
+1. `apply_model_overrides`, `register_dataset`, `set_device`, `set_seeds`: in-process configuration.
+2. `make_best_pt_models`: copies `*_fold{best_fold}.pt` → `*_best.pt`.
+3. `cupy_cpu_fallback`: no-op cupy memory pool when no CUDA device is available (ROCKET/MINIROCKET on CPU).
 
 ## 4. Data leakage: rules applied
 
@@ -122,12 +114,9 @@ Choices:
 - Bit-for-bit reproducibility is not guaranteed: non-deterministic PyTorch operations, multiple threads,
   different dependency versions. The GUI records the package commit (with a "local changes" flag),
   versions and seeds, and warns if the package changed since the original run.
-- Generated labeling always covers 1996-01-01 → 2025-04-30 (fixed in the package) and can take
-  tens of minutes.
 - The "test_*" metrics shown in training are those the package computes per fold; the reference
   evaluation is the one of the inference artifact.
 - Predictions of PyTorch models use **uncalibrated** sigmoid probabilities (like `run_test`); the CV threshold
   used is the fold `best_threshold`, optimized on the same uncalibrated probabilities.
-- `db_update()` (Home → *Real database*) is the only operation that writes the database: it runs as its own
-  background process (`cs_gui.dbsync`), writes next to the configured real database and needs the network
-  (Google Drive through `gdown`).
+- The Data page is the only place that writes the data store: `python -m cornerstone.data` runs as its own
+  background process (`cs_gui.datasync`) and needs the network (JSOC, NOAA SWPC, Google Drive for the snapshot).

@@ -16,8 +16,8 @@ workspace/                    # real mode (workspace_demo/ for demo mode)
 
 | Type | Id prefix | Parents | Main files |
 |---|---|---|---|
-| `labels` | `lbl-` | — | `labels.sqlite` (table `DF_…_three_classes`), `labels.csv` |
-| `dataset` | `ds-` | `labels` | `sharp_dataset_db_<table>_<class>_w<h>h_s<m>min.h5`, `missing_data_log.csv` |
+| `labels` | `lbl-` | — | `labels.parquet` (t_X, HARPNUM, label, strat_class, …), `flares.parquet` (flare → HARP association), `labels_meta.json` (all parameters, data provenance), `labels.csv` (up to 300k rows) |
+| `dataset` | `ds-` | `labels` | `dataset.h5` (`X`, `Y`, `label_<name>`, `label_u_<name>` = stratification class, `HARPNUM`, `timestamps`, `QUALITY`, attribute `metadata`), `dataset.missing.csv` |
 | `split` | `spl-` | `dataset` | `split_config.json`, `split/splits/split_{test,cv_k_train,cv_k_val}.h5`, `split/plots/*.png`, `split/config/` |
 | `model_config` | `mdl-` | — | manifest only (configuration) |
 | `training` | `trn-` | `split`, `model_config` | `train_config.json`, `results/split/<task>/{models,metrics,plots,calibration,configs}/` |

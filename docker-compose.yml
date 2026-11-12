@@ -4,9 +4,10 @@
 #   docker compose logs -f           # follow the logs
 #   docker compose down              # stop (the workspace volume is kept)
 #
-# Real data: download the database from the Home page (it is kept in the `db` volume), or use a
-# database you already have by setting CORNERSTONE_DB_DIR / CORNERSTONE_DB_FILE (e.g. in a .env
-# file next to this one). Without a database the GUI starts in demo mode on synthetic data.
+# Real data: download it from the Data page (the Parquet store is kept in the `db` volume, folder
+# datastore/), or use a folder of this computer with CORNERSTONE_DATA_DIR (e.g. in a .env file next
+# to this one). A database of the former dump (cornerstone.sqlite) in that folder can be imported
+# from the Data page. Without data the GUI starts in demo mode on synthetic data.
 services:
   gui:
     build:
@@ -18,12 +19,12 @@ services:
       # only reachable from this computer; remove "127.0.0.1:" to expose it on the network
       - "127.0.0.1:${CS_GUI_PORT:-8501}:8501"
     environment:
-      CS_GUI_DB_PATH: /data/${CORNERSTONE_DB_FILE:-cornerstone.sqlite}
+      CS_GUI_LEGACY_DB: /data/${CORNERSTONE_DB_FILE:-cornerstone.sqlite}
     volumes:
       - workspace:/workspace
-      # a name (default `db`) is a Docker volume, a path is a folder of this computer. Writable:
-      # the database download writes there; the GUI itself opens the database read-only
-      - ${CORNERSTONE_DB_DIR:-db}:/data
+      # a name (default `db`, the volume of earlier versions) is a Docker volume, a path is a folder
+      # of this computer. Writable: the data updates write datastore/ there; the GUI only reads it
+      - ${CORNERSTONE_DATA_DIR:-${CORNERSTONE_DB_DIR:-db}}:/data
     # PyTorch data loaders and the package multiprocessing pools use shared memory
     shm_size: "2gb"
     restart: unless-stopped

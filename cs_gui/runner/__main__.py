@@ -1,6 +1,6 @@
 """Runner entry point (executed with the CORNERSTONE virtualenv interpreter).
 
-    python -m cs_gui.runner --workspace W --db DB --mode real --job JOB_ID ART_ID [ART_ID ...]
+    python -m cs_gui.runner --workspace W --data-root STORE --mode real --job JOB_ID ART_ID [ART_ID ...]
     python -m cs_gui.runner --introspect OUT.json --cornerstone-root ROOT
 
 Artifacts are executed in the given order; completed ones are skipped (resume), the chain stops
@@ -50,7 +50,7 @@ def _on_sigterm(signum, frame):
     os._exit(143)
 
 
-def run_artifacts(workspace: str, db: str, mode: str, job_id: str, ids: list[str], cornerstone_root: str) -> int:
+def run_artifacts(workspace: str, data_root: str, mode: str, job_id: str, ids: list[str], cornerstone_root: str) -> int:
     from .steps import STEPS, Ctx
     store = ArtifactStore(workspace)
     _current["store"] = store
@@ -80,7 +80,7 @@ def run_artifacts(workspace: str, db: str, mode: str, job_id: str, ids: list[str
         print(f"\n===== [cs-gui] {now_iso()} step '{m['type']}' artifact {aid} (job {job_id}) =====", flush=True)
         os.chdir(store.path(aid))
         try:
-            summary = STEPS[m["type"]](Ctx(store=store, m=m, db=db, mode=mode, cornerstone_root=cornerstone_root))
+            summary = STEPS[m["type"]](Ctx(store=store, m=m, data_root=data_root, mode=mode, cornerstone_root=cornerstone_root))
             store.register_outputs(aid)
             store.update(aid, summary=summary, provenance=prov)
             store.set_status(aid, "completed", finished_at=now_iso(), duration_s=round(time.time() - t0, 1),
@@ -112,7 +112,7 @@ def introspect(out: str, cornerstone_root: str) -> None:
     import torch
 
     sigs = {}
-    for meth in ("splitting_labeling", "create_hdf5_from_db", "create_dataset_splits", "train_models", "test_model"):
+    for meth in ("create_dataset_splits", "train_models", "test_model"):
         sig = inspect.signature(getattr(Cornerstone, meth))
         sigs[meth] = {k: (None if v.default is inspect.Parameter.empty else repr(v.default))
                       for k, v in sig.parameters.items() if k != "self"}
@@ -144,7 +144,7 @@ def introspect(out: str, cornerstone_root: str) -> None:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="cs_gui.runner")
     ap.add_argument("--workspace")
-    ap.add_argument("--db")
+    ap.add_argument("--data-root")
     ap.add_argument("--mode", default="real")
     ap.add_argument("--job", default="manual")
     ap.add_argument("--introspect")
@@ -155,9 +155,9 @@ def main(argv=None) -> int:
     if a.introspect:
         introspect(a.introspect, root)
         return 0
-    if not (a.workspace and a.db and a.ids):
-        ap.error("--workspace, --db and at least one artifact are required")
-    return run_artifacts(a.workspace, a.db, a.mode, a.job, a.ids, root)
+    if not (a.workspace and a.data_root and a.ids):
+        ap.error("--workspace, --data-root and at least one artifact are required")
+    return run_artifacts(a.workspace, a.data_root, a.mode, a.job, a.ids, root)
 
 
 if __name__ == "__main__":
