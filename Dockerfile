@@ -23,6 +23,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.7.20 /uv /usr/local/bin/uv
 ENV VIRTUAL_ENV=/opt/venv \
     PATH=/opt/venv/bin:$PATH \
     UV_NO_CACHE=1 \
+    UV_HTTP_TIMEOUT=600 \
     PYTHONUNBUFFERED=1
 COPY docker/requirements-cornerstone.txt docker/requirements-gui.txt /tmp/
 RUN uv venv /opt/venv --python /usr/local/bin/python \
