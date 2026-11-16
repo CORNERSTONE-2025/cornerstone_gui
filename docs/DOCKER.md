@@ -28,11 +28,13 @@ page shows a banner, and the results have no scientific value.
 Open the **Data** page. It shows what the store contains and runs, in the background with a live log,
 one of:
 
-- **Update from the sources**: downloads SHARP DEF and NRT from JSOC, the GOES flares from NOAA SWPC and
-  the HARP ↔ NOAA map. The first time this takes a few hours (SHARP); afterwards only what changed is
-  downloaded (minutes). An interrupted run resumes from the last complete file.
-- **Published snapshot**: a Parquet copy of the store published by the project (minutes), then
+- **Published snapshot** (first tab while the store is empty, recommended for a new installation): the
+  Parquet copy of the store published by the project on Google Drive (~630 MB, about 15 minutes, every
+  file checked against its sha256; launching it again resumes an interrupted download), then
   *Update from the sources* adds what is newer.
+- **Update from the sources**: downloads SHARP DEF and NRT from JSOC, the GOES flares from NOAA SWPC and
+  the HARP ↔ NOAA map. On an empty store this downloads everything and takes a few hours (SHARP);
+  afterwards only what changed is downloaded (minutes). An interrupted run resumes from the last complete file.
 - **Import the former database**: converts a `cornerstone.sqlite` of the former dump (about 2 minutes),
   then *Update from the sources* brings it up to date.
 

@@ -315,26 +315,39 @@ def data_panel() -> None:
             st.success(f"Last run ({job.get('action')}) completed ({job.get('finished_at', '')[:19].replace('T', ' ')}).")
         elif job.get("status") in ("failed", "cancelled"):
             st.error(f"Last run ({job.get('action')}) {job['status']}: {job.get('error')}")
-        _data_actions(s, stt)
+        _data_actions(s, stt, empty=not len(table))
     if job.get("log"):
         with st.expander("Log of the last run", expanded=stt["running"]):
             log_box(job["log"], key="data_update", height=320)
 
 
-def _data_actions(s: Settings, stt: dict) -> None:
-    t_up, t_snap, t_imp = st.tabs(["Update from the sources", "Published snapshot", "Import the former database"])
+def _data_actions(s: Settings, stt: dict, empty: bool = False) -> None:
+    # on an empty store the snapshot comes first: downloading everything from JSOC takes hours
+    names = ["Update from the sources", "Published snapshot", "Import the former database"]
+    if empty:
+        names = ["Published snapshot (recommended)", "Download everything from the sources",
+                 "Import the former database"]
+        t_snap, t_up, t_imp = st.tabs(names)
+    else:
+        t_up, t_snap, t_imp = st.tabs(names)
     with t_up:
-        st.caption("Incremental: only the HARP blocks still evolving (data of the last 60 days) and the "
-                   "current year of GOES events are downloaded again.")
+        if empty:
+            st.warning("The store is empty: downloading everything from JSOC and NOAA takes **several hours**. "
+                       "The published snapshot (previous tab) takes minutes, then *Update* adds what is newer.")
+        else:
+            st.caption("Incremental: only the HARP blocks still evolving (data of the last 60 days) and the "
+                       "current year of GOES events are downloaded again.")
         src = st.multiselect("Sources", list(datasync.SOURCES), list(datasync.SOURCES),
                              format_func=datasync.SOURCES.get, key="data_sources")
-        full = st.checkbox("Download everything again (--full)", key="data_full")
-        _launch_button(s, "update", "Update the data", sources=src, full=full, disabled=not src)
+        full = st.checkbox("Download everything again (--full)", key="data_full", disabled=empty)
+        _launch_button(s, "update", "Download from the sources" if empty else "Update the data",
+                       sources=src, full=full, disabled=not src, primary=not empty)
     with t_snap:
         url = st.text_input("Google Drive folder (empty = bootstrap_url of data_config.json)", key="data_url")
-        st.caption("A Parquet copy of the store published by the project: faster than downloading from "
-                   "JSOC. Afterwards *Update from the sources* adds what is newer.")
-        _launch_button(s, "snapshot", "Download the snapshot", url=url or None)
+        st.caption("A Parquet copy of the store published by the project (~630 MB, every file checked "
+                   "against its sha256): much faster than downloading from JSOC. If Drive interrupts the "
+                   "download, launching it again resumes it. Afterwards *Update from the sources* adds what is newer.")
+        _launch_button(s, "snapshot", "Download the snapshot", url=url or None, primary=True)
     with t_imp:
         default = s.legacy_db_path or ""
         path = st.text_input("Former SQLite database (cornerstone.sqlite)", default, key="data_sqlite")
@@ -346,11 +359,13 @@ def _data_actions(s: Settings, stt: dict) -> None:
         _launch_button(s, "import", "Import", sqlite=path, disabled=not ok)
 
 
-def _launch_button(s: Settings, action: str, label: str, disabled: bool = False, **kw) -> None:
+def _launch_button(s: Settings, action: str, label: str, disabled: bool = False, primary: bool = True,
+                   **kw) -> None:
     problems = datasync.preflight(s, action)
     if problems:
         st.warning("\n\n".join(problems))
-    if st.button(label, key=f"data_launch_{action}", disabled=disabled or bool(problems), type="primary"):
+    if st.button(label, key=f"data_launch_{action}", disabled=disabled or bool(problems),
+                 type="primary" if primary else "secondary"):
         try:
             datasync.launch(s, action, **kw)
         except (RuntimeError, ValueError) as e:
