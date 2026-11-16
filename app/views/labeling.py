@@ -13,12 +13,20 @@ c = ui.page_header("Event labeling",
 with st.expander("📖 Label definition", expanded=False):
     st.markdown("""
 For every **t_X** of a regular grid (step *Δ*) and every HARP observed at t_X, with flare window
-**[t_X, t_X + W]** and threshold **S** (e.g. M = 1e-5 W/m²):
+**[t_X, t_X + W]**:
 
-- **YES**: at least one flare ≥ S peaks in the flare window;
-- otherwise, from the flares ≥ S *before* (≤ t_X) and *after* (≥ t_X + W):
+**Prediction label** (threshold **S_p**, e.g. M = 1e-5 W/m²) — the target of the models, binary:
 
-| label | before | after |
+- **YES**: at least one flare ≥ S_p peaks in the flare window;
+- **NO**: otherwise.
+
+**Stratification class** (threshold **S_s**, same flare window) — only used to stratify the
+train/val/test splits, so that every split has the same mix of regions:
+
+- the class of the strongest flare of the window (C/M/X…) when it is ≥ S_s;
+- otherwise the history of the region, from the flares ≥ S_s *before* (≤ t_X) and *after* (≥ t_X + W):
+
+| class | before | after |
 |---|---|---|
 | NO1 | no | no |
 | NO2 | no | yes |
@@ -27,11 +35,7 @@ For every **t_X** of a regular grid (step *Δ*) and every HARP observed at t_X, 
 
 "Before" and "after" are unlimited by default (whole past / whole future of the HARP); with a
 **stratification window L** they become [t_X − L, t_X] and [t_X + W, t_X + W + L].
-
-The **prediction label** (threshold S_p) is the model target (YES vs NO\\*). The **stratification
-class** (threshold S_s, same windows) is the class of the strongest flare of the window (C/M/X…) when
-≥ S_s, otherwise NO1–NO4 computed with S_s: it is used to stratify the train/val/test splits.
-The two thresholds may coincide or not.
+S_s and S_p may coincide or not.
 
 The former static tables (`DF_*_three_classes`) are reproduced with W = L = 24 h, Δ = 24 h,
 S_s = S_p. **CME:** no CME catalogue is used.
@@ -76,6 +80,8 @@ with tab_new:
                                help="t_X are aligned to midnight UTC (grid origin 1996-01-01).")
     with b:
         st.markdown("**Stratification class**")
+        st.caption("Not a target: class of the window maximum (C/M/X…) or NO1–NO4 (flares ≥ S_s before/after "
+                   "the window), used to stratify the splits. See *Label definition*.")
         s_thr = _threshold("Stratification threshold S_s", "lab_sthr", THRESHOLDS, allow_same=True, index=0)
         L_on = st.checkbox("Limit the before/after windows (stratification window L)", key="lab_L_on",
                            on_change=lambda: st.session_state.update(lab_L=st.session_state["lab_W"]))
@@ -151,7 +157,9 @@ with tab_list:
             k[2].metric("Positives (YES)", f"{100 * s['positive_rate']:.2f}%")
             k[3].metric("t_X range", f"{s['t_X_start'][:10]} → {s['t_X_end'][:10]}")
             c1, c2, c3 = st.columns(3)
-            lc = pd.DataFrame({"label": list(s["label_counts"]), "n": list(s["label_counts"].values())})
+            # labels of earlier versions kept NO1..NO4 in the prediction label: shown as NO
+            lab_n = pd.Series(s["label_counts"]).groupby(lambda k: "YES" if k == "YES" else "NO").sum()
+            lc = pd.DataFrame({"label": lab_n.index, "n": lab_n.values})
             c1.plotly_chart(px.bar(lc, x="label", y="n", title="Prediction label", log_y=True), width="stretch")
             sc = pd.DataFrame({"class": list(s.get("strat_counts", {})), "n": list(s.get("strat_counts", {}).values())})
             c2.plotly_chart(px.bar(sc, x="class", y="n", title="Stratification class", log_y=True), width="stretch")

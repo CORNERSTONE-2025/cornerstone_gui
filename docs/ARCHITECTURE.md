@@ -9,7 +9,7 @@ Analysis made on commit `897a662` (branch `main` of CORNERSTONE-2025). The GUI d
 | Method | What it does | Input → output |
 |---|---|---|
 | `python -m cornerstone.data update / bootstrap-*` (`cornerstone.data`) | Download/update of the Parquet store from JSOC and NOAA SWPC, or creation from the snapshot / former dump | network → `<data_root>/raw/**.parquet` + `manifest.json` |
-| `cornerstone.labeling.labels_and_flares(store, series, LabelConfig, QualityFilter, FlareConfig)` | Parametric labels per (t_X, HARP): prediction label YES/NO1–NO4 and stratification class | store → labels, flare → HARP association, metadata |
+| `cornerstone.labeling.labels_and_flares(store, series, LabelConfig, QualityFilter, FlareConfig)` | Parametric labels per (t_X, HARP): prediction label YES/NO and stratification class (C/M/X… or NO1–NO4) | store → labels, flare → HARP association, metadata |
 | `cornerstone.dataset.build_dataset(store, series, labels, path, features, quality, window_hours, sampling_minutes, …)` | SHARP time series in the `window_hours` before every t_X | store + labels → HDF5 (`label_<name>`, `label_u_<name>`) + `*.missing.csv` |
 | `create_dataset_splits(config)` | Feature selection, missing-data/time/CMASK filters, random or chronological split with k-fold grouped by HARP | HDF5 → `splits/*_cv_k_{train,val}.h5`, `*_test.h5`, plots, config |
 | `train_models(train_config_path)` | Cross-validation for every window (3h/6h/12h/24h) | split + JSON → per-fold models, JSON metrics, plots |

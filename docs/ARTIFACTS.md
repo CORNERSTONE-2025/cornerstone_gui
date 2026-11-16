@@ -57,7 +57,7 @@ workspace/                    # real mode (workspace_demo/ for demo mode)
 |---|---|
 | `window` | time window of the model (3h, 6h, 12h, 24h) |
 | `HARPNUM`, `t_issue` | Active Region and issue time (last non-empty timestamp of the series = t_X) |
-| `label`, `label_u` | package label (YES/NO1..NO4) and flare class |
+| `label`, `label_u` | prediction label (YES/NO; NO1..NO4 in datasets of earlier versions) and stratification class (C/M/X… or NO1..NO4) |
 | `y_true` | 1 if `label == YES` |
 | `score` | predicted probability (sigmoid for PyTorch, `predict_proba` for sklearn) |
 | `threshold`, `y_pred` | threshold used and decision |

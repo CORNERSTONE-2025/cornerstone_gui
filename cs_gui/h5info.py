@@ -3,7 +3,7 @@
 Layout written by ``create_hdf5_from_db`` / ``save_split_to_h5``::
 
     X           (N, T, F) float32, NaN = missing observation
-    Y           (N,) bytes  binary label: YES / NO1..NO4
+    Y           (N,) bytes  binary label: YES / NO (NO1..NO4 in datasets of earlier versions)
     Y_u         (N,) bytes  (split files) flare class of the label: C/M/X or NO*
     label_<L>   (N,) bytes  (raw files) same as Y, named after the label type
     HARPNUM     (N,) int
