@@ -24,7 +24,8 @@ SERIES = {"DEF": "DEF (definitive SHARP, hmi.sharp_720s)", "NRT": "NRT (near-rea
 DERIVED = ("USFLUX_N1", "TOTUSJZ_N1", "TOTUSJH_N1", "MEANGBZ_N2", "MEANGBH_N2")
 META_COLS = ("T_OBS", "HARPNUM", "QUALITY", "NOAA_AR", "NOAA_NUM", "NOAA_ARS")
 DATASET_NAMES = {"sharp/DEF": "SHARP DEF", "sharp/NRT": "SHARP NRT", "goes/swpc_events": "GOES flares (SWPC)",
-                 "harp_noaa": "HARP ↔ NOAA map", "reference/legacy": "Former static tables (reference)"}
+                 "harp_noaa": "HARP ↔ NOAA map"}
+OBSOLETE = ("reference/",)   # tables of the former dump in stores of earlier versions: not shown
 
 
 def manifest(root: str) -> dict:
@@ -46,6 +47,8 @@ def status(root: str) -> pd.DataFrame:
     """One row per dataset of the store: files, rows, size, time coverage, last update."""
     rows = []
     for name, d in sorted(manifest(root).get("datasets", {}).items()):
+        if name.startswith(OBSOLETE):
+            continue
         files = d.get("files", {})
         until = [f.get("max_t_obs") for f in files.values() if f.get("max_t_obs")]
         src = d.get("source") or {}

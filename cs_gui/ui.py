@@ -351,7 +351,7 @@ def _data_actions(s: Settings, stt: dict, empty: bool = False) -> None:
     with t_imp:
         default = s.legacy_db_path or ""
         path = st.text_input("Former SQLite database (cornerstone.sqlite)", default, key="data_sqlite")
-        st.caption("Converts SHARP DEF/NRT and the reference tables of the former dump into the store "
+        st.caption("Converts the SHARP DEF/NRT tables of the former dump into the store "
                    "(about 2 minutes); then *Update from the sources* brings them up to date.")
         ok = bool(path) and Path(path).exists()
         if path and not ok:
