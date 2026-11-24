@@ -11,6 +11,10 @@ import streamlit as st  # noqa: E402
 from cs_gui import ui  # noqa: E402
 
 st.set_page_config(page_title="CORNERSTONE GUI", page_icon="☀️", layout="wide")
+# Larger text than the default 16 px. Set as CSS on the root element (Streamlit sizes text in rem)
+# and not as [theme] options in config.toml: those replace the Light/Dark/System theme choice of
+# the settings menu with a single custom theme.
+st.html("<style>html { font-size: 18px !important; }</style>")
 
 P = ROOT / "app" / "views"        # not "pages/": Streamlit would also run those files on their own
 pages = {

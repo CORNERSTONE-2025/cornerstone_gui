@@ -6,9 +6,3 @@ headless = true
 # artifact bundles (Experiments → Share) can hold datasets and models
 maxUploadSize = 8000
 
-[theme]
-# larger text than the Streamlit default (16 px) for readability; colours follow the browser
-baseFontSize = 18
-codeFontSize = "0.9rem"
-headingFontSizes = ["2.6rem", "2rem", "1.6rem", "1.3rem", "1.1rem", "1rem"]
-baseRadius = "medium"
