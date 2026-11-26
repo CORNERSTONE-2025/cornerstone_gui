@@ -1,10 +1,14 @@
+import datetime as dt
+
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 
 from cs_gui import ui
-from cs_gui.pipeline import (AMBIGUOUS_RULES, CALIBRATIONS, FLARE_DEFAULTS, SERIES, THRESHOLDS, label_key,
-                             quality_preset, validate_labels)
+from cs_gui.label_timeline import LabelTimeline
+from cs_gui.labeling_form import auto_name, form_errors, labeling_config, parse_threshold, threshold_flux
+from cs_gui.pipeline import (AMBIGUOUS_RULES, CALIBRATIONS, FLARE_DEFAULTS, SERIES, label_key, quality_preset,
+                             validate_labels)
 
 c = ui.page_header("Event labeling",
                    "Parametric labeling (package module cornerstone.labeling): for every issue time t_X and "
@@ -44,55 +48,75 @@ S_s = S_p. **CME:** no CME catalogue is used.
 tab_new, tab_list = st.tabs(["New labeling", "Produced labels"])
 
 
-def _threshold(label: str, key: str, options: dict, allow_same: bool = False, index: int = 1):
-    opts = (["same"] if allow_same else []) + list(options) + ["custom"]
-    fmt = {"same": "same as the prediction threshold", "custom": "custom (class or W/m²)", **options}
-    choice = st.selectbox(label, opts, index=index, format_func=fmt.get, key=key)
-    if choice == "same":
-        return None
-    if choice == "custom":
-        v = st.text_input("Value (e.g. M5, C2.5, 3e-6)", "M5", key=f"{key}_custom").strip()
-        try:
-            return float(v)
-        except ValueError:
-            return v.upper()
-    return choice
+LIMITS = {"W": [0.5, 720.0], "step": [0.5, 720.0], "L": [0.5, 8760.0]}    # hours, as the former number fields
+RANGE_MIN = dt.date(2010, 5, 1)                                             # first SHARP data
+# widget of the form holding each field of the timeline
+TIMELINE_KEYS = {"W": "lab_W", "step": "lab_step", "L": "lab_L", "thr": "lab_thr", "sthr": "lab_sthr",
+                 "start": "lab_start", "end": "lab_end"}
+DEFAULTS = {"lab_W": 24.0, "lab_step": 24.0, "lab_L_on": False, "lab_L": 24.0, "lab_thr": "M",
+            "lab_sthr_on": False, "lab_sthr": "M", "lab_rng": False, "lab_start": RANGE_MIN,
+            "lab_end": dt.date.today(), "lab_name_manual": False}
 
 
-def _default(key: str, value) -> None:
-    """Initial value of a widget that a preset button may also set (no value= argument then)."""
-    st.session_state.setdefault(key, value)
+def _flux_or(text: str, fallback: float) -> float:
+    f = threshold_flux(parse_threshold(text))
+    return f if f is not None else fallback
 
 
 with tab_new:
-    for k, v in {"lab_W": 24.0, "lab_step": 24.0, "lab_L_on": False, "lab_L": 24.0}.items():
-        _default(k, v)
+    for k, v in DEFAULTS.items():
+        st.session_state.setdefault(k, v)
     if st.button("Load the parameters of the former static labels (W = L = Δ = 24 h)"):
-        for k, v in {"lab_W": 24.0, "lab_step": 24.0, "lab_L_on": True, "lab_L": 24.0}.items():
-            st.session_state[k] = v
-    a, b = st.columns(2)
-    with a:
-        st.markdown("**Data and prediction label**")
-        series = st.selectbox("SHARP series", list(SERIES), format_func=SERIES.get, key="lab_series")
-        thr = _threshold("Prediction threshold S_p", "lab_thr", THRESHOLDS)
-        W = st.number_input("Flare window W (hours)", 0.5, 720.0, step=1.0, key="lab_W")
-        step = st.number_input("Step of the t_X grid Δ (hours)", 0.5, 720.0, step=1.0, key="lab_step",
-                               help="t_X are aligned to midnight UTC (grid origin 1996-01-01).")
-    with b:
-        st.markdown("**Stratification class**")
-        st.caption("Not a target: class of the window maximum (C/M/X…) or NO1–NO4 (flares ≥ S_s before/after "
-                   "the window), used to stratify the splits. See *Label definition*.")
-        s_thr = _threshold("Stratification threshold S_s", "lab_sthr", THRESHOLDS, allow_same=True, index=0)
-        L_on = st.checkbox("Limit the before/after windows (stratification window L)", key="lab_L_on",
+        st.session_state.update(lab_W=24.0, lab_step=24.0, lab_L_on=True, lab_L=24.0)
+    # values dragged on the timeline go to the fields below before they are drawn
+    timeline = LabelTimeline("lab_tl")
+    for field, value in timeline.changes().items():
+        st.session_state[TIMELINE_KEYS[field]] = value
+    ss = st.session_state
+
+    series = st.selectbox("SHARP series", list(SERIES), format_func=SERIES.get, key="lab_series")
+    st.markdown("**Windows and thresholds** · flare window W, step Δ of the t_X grid, stratification "
+                "window L, prediction threshold S_p and stratification threshold S_s")
+    timeline.render(W=ss["lab_W"], step=ss["lab_step"], L_on=ss["lab_L_on"], L=ss["lab_L"],
+                    thr=_flux_or(ss["lab_thr"], 1e-5), sthr_on=ss["lab_sthr_on"],
+                    sthr=_flux_or(ss["lab_sthr"], 1e-5), rng_on=ss["lab_rng"], start=ss["lab_start"],
+                    end=ss["lab_end"], range_min=RANGE_MIN, range_max=dt.date.today(), limits=LIMITS)
+
+    f1, f2, f3 = st.columns(3)
+    W = f1.number_input("Flare window W (h)", *LIMITS["W"], step=1.0, key="lab_W")
+    step = f2.number_input("Step Δ of the t_X grid (h)", *LIMITS["step"], step=1.0, key="lab_step",
+                           help="t_X are aligned to midnight UTC (grid origin 1996-01-01).")
+    with f3:
+        L_on = st.checkbox("Finite window L (h)", key="lab_L_on",
+                           help="Stratification window L. Unchecked: the before/after windows are the whole past and future "
+                                "of the HARP.",
                            on_change=lambda: st.session_state.update(lab_L=st.session_state["lab_W"]))
-        L = st.number_input("L (hours, default = W)", 0.5, 8760.0, step=1.0, key="lab_L") if L_on else None
-        st.markdown("**Time range of t_X**")
-        rng_on = st.checkbox("Restrict (default: the whole observation span)", key="lab_rng")
-        start = end = None
-        if rng_on:
-            d1, d2 = st.columns(2)
-            start = str(d1.date_input("From", pd.Timestamp("2010-05-01"), key="lab_start"))
-            end = str(d2.date_input("To", pd.Timestamp.today(), key="lab_end"))
+        if L_on:
+            L = st.number_input("L (h)", *LIMITS["L"], step=1.0, key="lab_L", label_visibility="collapsed")
+        else:
+            L = None
+            st.text_input("L (h)", "∞ (unlimited)", disabled=True, label_visibility="collapsed")
+    t1, t2, _ = st.columns(3)
+    thr = parse_threshold(t1.text_input("Prediction threshold S_p", key="lab_thr",
+                                        help="GOES class (C, M, X, M5, C2.5…) or flux in W/m² (e.g. 3e-6)."))
+    with t2:
+        sthr_on = st.checkbox("S_s ≠ S_p", key="lab_sthr_on",
+                              help="Stratification threshold S_s. Unchecked: S_s = S_p. GOES class or flux in W/m², as S_p.",
+                              on_change=lambda: st.session_state.update(lab_sthr=st.session_state["lab_thr"]))
+        s_thr = None
+        if sthr_on:
+            s_thr = parse_threshold(st.text_input("S_s", key="lab_sthr", label_visibility="collapsed"))
+        else:
+            st.text_input("S_s", "= S_p", disabled=True, label_visibility="collapsed")
+    st.caption("The stratification class is not a target: class of the window maximum (C/M/X…) or NO1–NO4 "
+               "(flares ≥ S_s before/after the window), used to stratify the splits. See *Label definition*.")
+
+    rng_on = st.checkbox("Restrict the time range of t_X (default: the whole observation span)", key="lab_rng")
+    r2, r3, _ = st.columns(3)
+    start = end = None
+    if rng_on:
+        start = str(r2.date_input("From", key="lab_start"))
+        end = str(r3.date_input("To", key="lab_end"))
     with st.expander("Records used (quality filter)"):
         preset = st.radio("Preset", ["default", "legacy_clean", "custom"], horizontal=True, key="lab_qp",
                           format_func={"default": "every record with a patch position (former SHARPC_all)",
@@ -126,15 +150,21 @@ with tab_new:
                               FLARE_DEFAULTS["max_gap_hours"], key="lab_gap")
         margin = f2.number_input("Tolerance on the patch box for the flare position (deg)", 0.0, 30.0,
                                  FLARE_DEFAULTS["position_margin_deg"], key="lab_margin")
-    cfg = {"series": series, "threshold": thr, "flare_window_hours": float(W), "step_hours": float(step),
-           "strat_threshold": s_thr, "strat_window_hours": float(L) if L else None, "start": start, "end": end,
-           "quality": q, "flares": {"calibration": cal, "peak_fallback": peak, "ambiguous": amb,
-                                    "position_margin_deg": float(margin), "max_gap_hours": float(gap)}}
-    sthr_txt = "= S_p" if s_thr is None else s_thr
-    name = st.text_input("Name", f"Label {thr} {series} W{W:g}h Δ{step:g}h S_s {sthr_txt}"
-                         + (f" L{L:g}h" if L else ""), key="lab_name")
+    cfg = labeling_config(series, thr, W, step, s_thr, L, start, end, q, calibration=cal, peak_fallback=peak,
+                          ambiguous=amb, position_margin_deg=margin, max_gap_hours=gap)
+    # the name follows the parameters until the user edits it
+    auto = auto_name(cfg)
+    if not ss["lab_name_manual"]:
+        ss["lab_name"] = auto
+    n1, n2 = st.columns([6, 1], vertical_alignment="bottom")
+    name = n1.text_input("Name", key="lab_name",
+                         on_change=lambda a: ss.update(lab_name_manual=ss["lab_name"] != a), args=(auto,),
+                         help="Follows the parameters until you edit it.")
+    if ss["lab_name_manual"]:
+        n2.button("↺ auto", help="Back to the automatic name", on_click=lambda: ss.update(lab_name_manual=False))
     desc = st.text_area("Description", "", height=70)
-    errs = validate_labels(cfg, c.settings) if c.settings.has_data() else ["No data in the store: see the Data page"]
+    errs = form_errors(W, step, L, thr, s_thr, start, end)
+    errs += validate_labels(cfg, c.settings) if c.settings.has_data() else ["No data in the store: see the Data page"]
     ui.config_summary("labeling", cfg, {"HDF5 label name": label_key(cfg) if not errs else "—"})
     if ui.show_errors(errs) and st.button("Create and run labeling", type="primary"):
         ui.create_and_launch(lambda: c.pipeline.create_labels(name, cfg, desc))
