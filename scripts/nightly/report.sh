@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Morning report of the nightly campaign (started by cron, e.g. at 07:30). See docs/NIGHTLY_TESTS.md.
 #
-#   scripts/nightly/report.sh [RUN_DIR]     # default: the most recent run in $NIGHTLY_DIR
+#   scripts/nightly/report.sh [RUN_DIR]     # default: the most recent nightly run (not *_quick)
 #
 # 1. Claude Code (headless) reads the results and writes REPORT.md in the run folder; it may only
 #    read files and write in that folder. Without Claude, summary.md (automatic) is the report.
@@ -15,7 +15,7 @@ main() {
 
     REPO="$(cd "$(dirname "$0")/../.." && pwd)"
     BASE="${NIGHTLY_DIR:-$HOME/cornerstone_nightly}"
-    RUN="${1:-$(ls -1d "$BASE"/20*/ 2>/dev/null | sort | tail -n 1)}"
+    RUN="${1:-$(ls -1d "$BASE"/20??-??-??/ 2>/dev/null | sort | tail -n 1)}"
     RUN="${RUN%/}"
     BRANCH=test-reports
     [ -f "$RUN/results.json" ] || { echo "No results in '$RUN'"; exit 1; }
