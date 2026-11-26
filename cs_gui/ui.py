@@ -399,13 +399,14 @@ def artifact_list(types, columns_fn=None, key: str = "list") -> str | None:
         return None
     rows = []
     for m in items:
-        r = {"id": m["id"], "name": m["name"], "status": STATUS_STYLE.get(m["status"], ("", m["status"]))[1],
+        r = {"name": m["name"], "status": STATUS_STYLE.get(m["status"], ("", m["status"]))[1],
              "created": m["created_at"][:19].replace("T", " ")}
         if columns_fn:
             try:
                 r.update(columns_fn(m))
             except (KeyError, TypeError, IndexError):
                 pass
+        r["id"] = m["id"]           # last: only needed to find the artifact folder or in support requests
         rows.append(r)
     df = pd.DataFrame(rows)
     ev = st.dataframe(df, hide_index=True, width="stretch", on_select="rerun",
