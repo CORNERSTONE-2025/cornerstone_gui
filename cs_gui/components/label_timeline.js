@@ -54,6 +54,15 @@ function snapFlux(f) {
   return clamp(Math.max(1, Math.round(f / cls[1])) * cls[1], Y_MIN, Y_MAX);
 }
 
+// when the issue times fall (as cs_gui.labeling_form.tx_times, short): "00, 06, 12, 18 UTC"
+function txTimes(step) {
+  if (step >= 24) return step % 24 === 0 ? (step === 24 ? "every day 00:00 UTC" : `every ${step / 24} days 00:00 UTC`) : "time of day varies";
+  const n = 24 / step;
+  if (n !== Math.floor(n)) return "time of day varies";
+  if (n > 6) return `${n} per day from 00:00 UTC`;
+  return Array.from({ length: n }, (_, k) => { const h = k * step; return `${String(Math.floor(h)).padStart(2, "0")}:${String(Math.round(h % 1 * 60)).padStart(2, "0")}`; }).join(", ") + " UTC";
+}
+
 const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
 const dayMs = (iso) => Date.parse(iso + "T00:00:00Z");
 
@@ -230,7 +239,7 @@ function create(root) {
       const x = g.X(k * v.step);
       el("line", { x1: x, x2: x, y1: yTop, y2: yBot, class: "tl-tick" }, svg);
       if (k % every === 0) handle(svg, `step:${k}`, x, yBot, "diamond",
-        `Step Δ = ${fmtHours(v.step)} (issue time t_X ${k > 0 ? "+" : "−"} ${Math.abs(k)}Δ)`, "tl-h-step");
+        `Interval between issue times Δ = ${fmtHours(v.step)} (t_X ${k > 0 ? "+" : "−"} ${Math.abs(k)}Δ): t_X ${txTimes(v.step)}`, "tl-h-step");
     }
     // a few time labels: t_X, W, L edges
     el("text", { x: x0, y: yBot + 22, "text-anchor": "middle", class: "tl-axis tl-strong" }, svg, "t_X");
@@ -252,7 +261,7 @@ function create(root) {
       const k = S.drag.kind;
       if (k === "W") bubble(svg, xW, yTop, `W = ${fmtHours(v.W)}`);
       else if (k.startsWith("L")) bubble(svg, k === "L+" ? g.X(v.W + v.L) : g.X(-v.L), yTop, `L = ${fmtHours(v.L)}`);
-      else if (k.startsWith("step")) bubble(svg, g.X(+k.split(":")[1] * v.step), yBot - 10, `Δ = ${fmtHours(v.step)}`);
+      else if (k.startsWith("step")) bubble(svg, g.X(+k.split(":")[1] * v.step), yBot - 10, `Δ = ${fmtHours(v.step)} · t_X ${txTimes(v.step)}`);
       else { const f = v[k]; bubble(svg, xR - 60, g.Y(f), `${k === "thr" ? "S_p" : "S_s"} = ${fluxClass(f)} · ${f.toExponential(0)} W/m²`); }
     }
   }

@@ -92,3 +92,39 @@ def form_errors(W: float, step: float, L: float | None, thr, s_thr, start: str |
     if start and end and start >= end:
         errs.append(f"Time range of t_X: the start ({start}) must be before the end ({end})")
     return errs
+
+
+def tx_times(step_hours: float) -> str:
+    """When the issue times fall, for a grid step: ``every day at 00:00 UTC``, ``every day at 00:00,
+    06:00, 12:00, 18:00 UTC``… (the grid starts at 1996-01-01 00:00 UTC, see the package labeling)."""
+    s = float(step_hours)
+    if s <= 0:
+        return "—"
+    if s >= 24:
+        days = s / 24
+        if days == int(days):
+            return "every day at 00:00 UTC" if days == 1 else f"every {int(days)} days at 00:00 UTC"
+        return f"every {s:g} h (the time of day changes from one t_X to the next)"
+    per_day = 24 / s
+    if per_day != int(per_day):
+        return f"every {s:g} h (the time of day changes from day to day)"
+    times = [f"{int(k * s):02d}:{int(round(k * s % 1 * 60)):02d}" for k in range(int(per_day))]
+    if len(times) > 6:
+        return f"every {s:g} h from 00:00 UTC ({len(times)} per day)"
+    return "every day at " + ", ".join(times) + " UTC"
+
+
+def auto_description(cfg: dict, quality_preset_name: str) -> str:
+    """The parameters of a labeling run that its automatic name leaves out, one per line."""
+    q, f = cfg["quality"], cfg["flares"]
+    lines = [f"t_X: {tx_times(cfg['step_hours'])}, "
+             + (f"from {cfg['start']} to {cfg['end']}" if cfg.get("start") else "whole observation span")]
+    if quality_preset_name == "custom":
+        set_ = [f"{k}={v}" for k, v in q.items() if v not in (None, [], False)]
+        lines.append("Records: custom filter (" + ", ".join(set_) + ")")
+    else:
+        lines.append(f"Records: preset {quality_preset_name}")
+    lines.append(f"Flares: calibration {f['calibration']}, without peak → {f['peak_fallback']}, "
+                 f"several HARPs → {f['ambiguous']}, position tolerance {f['position_margin_deg']:g}°, "
+                 f"nearest HARP within {f['max_gap_hours']:g} h")
+    return "\n".join(lines)

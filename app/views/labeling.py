@@ -6,7 +6,8 @@ import streamlit as st
 
 from cs_gui import ui
 from cs_gui.label_timeline import LabelTimeline
-from cs_gui.labeling_form import auto_name, form_errors, labeling_config, parse_threshold, threshold_flux
+from cs_gui.labeling_form import (auto_description, auto_name, form_errors, labeling_config, parse_threshold,
+                                  threshold_flux, tx_times)
 from cs_gui.pipeline import (AMBIGUOUS_RULES, CALIBRATIONS, FLARE_DEFAULTS, SERIES, label_key, quality_preset,
                              validate_labels)
 
@@ -84,8 +85,10 @@ with tab_new:
 
     f1, f2, f3 = st.columns(3)
     W = f1.number_input("Flare window W (h)", *LIMITS["W"], step=1.0, key="lab_W")
-    step = f2.number_input("Step Δ of the t_X grid (h)", *LIMITS["step"], step=1.0, key="lab_step",
-                           help="t_X are aligned to midnight UTC (grid origin 1996-01-01).")
+    step = f2.number_input("Interval between issue times t_X, Δ (h)", *LIMITS["step"], step=1.0, key="lab_step",
+                           help="Every how many hours a forecast is issued for each Active Region. Not a time "
+                                "of day: the t_X grid starts at midnight UTC (1996-01-01 00:00) and goes on by Δ.")
+    f2.caption(f"t_X {tx_times(step)}")
     with f3:
         L_on = st.checkbox("Finite window L (h)", key="lab_L_on",
                            help="Stratification window L. Unchecked: the before/after windows are the whole past and future "
@@ -162,7 +165,13 @@ with tab_new:
                          help="Follows the parameters until you edit it.")
     if ss["lab_name_manual"]:
         n2.button("↺ auto", help="Back to the automatic name", on_click=lambda: ss.update(lab_name_manual=False))
-    desc = st.text_area("Description", "", height=70)
+    # the description saved with the labels: the user's notes, then the parameters left out of the name
+    notes = st.text_area("Notes (optional)", "", height=70, key="lab_notes",
+                         help="Saved in the description of the labels, before the parameters below.")
+    params = auto_description(cfg, preset)
+    desc = f"{notes.strip()}\n\n{params}" if notes.strip() else params
+    st.caption("Description saved with the labels (shown in *Experiments and pipeline* and in the exports):")
+    st.code(desc, language=None, wrap_lines=True)
     errs = form_errors(W, step, L, thr, s_thr, start, end)
     errs += validate_labels(cfg, c.settings) if c.settings.has_data() else ["No data in the store: see the Data page"]
     ui.config_summary("labeling", cfg, {"HDF5 label name": label_key(cfg) if not errs else "—"})
@@ -178,6 +187,8 @@ with tab_list:
         "% YES": round(100 * m["summary"].get("positive_rate", 0), 2)}, key="labels")
     if sel:
         m = c.store.get(sel)
+        if m.get("description"):
+            st.caption(m["description"].replace("\n", "  \n"))
         ui.artifact_status_box(m)
         s = m["summary"]
         if m["status"] == "completed":

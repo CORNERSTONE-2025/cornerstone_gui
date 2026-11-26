@@ -4,8 +4,8 @@ import os
 
 import pytest
 
-from cs_gui.labeling_form import (auto_name, flux_class, form_errors, labeling_config, parse_threshold,
-                                  threshold_flux)
+from cs_gui.labeling_form import (auto_description, auto_name, flux_class, form_errors, labeling_config,
+                                  parse_threshold, threshold_flux, tx_times)
 from cs_gui.pipeline import quality_preset
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -77,6 +77,25 @@ def test_form_errors():
     assert form_errors(0.0, 24, -1.0, "M", None, None, None)[0].startswith("W:")
 
 
+def test_tx_times():
+    assert tx_times(24) == "every day at 00:00 UTC"
+    assert tx_times(6) == "every day at 00:00, 06:00, 12:00, 18:00 UTC"
+    assert tx_times(48) == "every 2 days at 00:00 UTC"
+    assert "changes" in tx_times(5) and "changes" in tx_times(36)
+
+
+def test_auto_description_has_what_the_name_leaves_out():
+    q = quality_preset("legacy_clean", "DEF")
+    cfg = labeling_config("DEF", "M", 24, 6, None, None, "2012-01-01", "2015-06-30", q, "operational", "drop",
+                          "flux", 3.0, 12.0)
+    d = auto_description(cfg, "legacy_clean")
+    assert d.splitlines()[0] == "t_X: every day at 00:00, 06:00, 12:00, 18:00 UTC, from 2012-01-01 to 2015-06-30"
+    for part in ("preset legacy_clean", "operational", "drop", "flux", "3°", "12 h"):
+        assert part in d
+    q["max_abs_lon"] = 60.0
+    assert "max_abs_lon=60.0" in auto_description(cfg, "custom")
+
+
 # ------------------------------------------------------------------------------------ the page
 def _page():
     from streamlit.testing.v1 import AppTest
@@ -119,3 +138,8 @@ def test_page_applies_timeline_changes():
     # the same message is applied once: a value typed afterwards is kept
     at.number_input(key="lab_W").set_value(10.0).run()
     assert at.number_input(key="lab_W").value == 10.0
+    # the description: notes first, then the parameters the name leaves out
+    at.text_area(key="lab_notes").set_value("test run").run()
+    desc = at.code[0].value
+    assert desc.startswith("test run\n\nt_X: every day at 00:00, 06:00, 12:00, 18:00 UTC, from 2014-02-03 to 2016-01-01")
+    assert "Records: preset default" in desc
