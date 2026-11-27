@@ -1,0 +1,1027 @@
+{
+  "started_at": "2026-11-26T20:00:11",
+  "updated_at": "2026-11-26T22:51:18",
+  "deadline": "2026-11-27T06:30",
+  "quick": false,
+  "results": [
+    {
+      "id": "P0.env",
+      "phase": "P0 environment",
+      "title": "Versions, hardware, disk, data store present",
+      "estimated_min": 1,
+      "started_at": "2026-11-26T20:00:11",
+      "status": "pass",
+      "message": "12 CPU, 24.6 GB RAM, CUDA False, 42 GB free",
+      "details": {
+        "python": "3.10.22",
+        "cpus": 12,
+        "ram_gb": 24.6,
+        "disk_free_gb": 41.8,
+        "cuda": false,
+        "cornerstone": {
+          "commit": "984804b6efabe66252da5416c6da0e0d760f4c36",
+          "dirty": false,
+          "branch": "HEAD",
+          "dirty_files": [],
+          "remote": "https://github.com/CORNERSTONE-2025/cornerstone_db_package.git"
+        },
+        "gui": {
+          "commit": "871c1a2c3917ce7cc7e964bfcf3171c5078347d5",
+          "dirty": false,
+          "branch": "main",
+          "dirty_files": [],
+          "remote": "https://github.com/CORNERSTONE-2025/cornerstone_gui.git"
+        },
+        "packages": {
+          "numpy": "2.2.6",
+          "pandas": "2.3.3",
+          "h5py": "3.15.1",
+          "scikit-learn": "1.7.2",
+          "scipy": "1.15.3",
+          "torch": "2.9.1+cpu",
+          "xgboost-cpu": "3.1.2",
+          "sktime": "0.39.0",
+          "clearml": "2.0.2",
+          "cupy-cuda12x": "13.6.0"
+        },
+        "data_store": "/data/datastore",
+        "store_has_manifest": true,
+        "legacy_sqlite": false
+      },
+      "duration_min": 0.02,
+      "log": null
+    },
+    {
+      "id": "P2.manifest",
+      "phase": "P2 data store",
+      "title": "Every store file matches the sha256 of the manifest",
+      "estimated_min": 6,
+      "started_at": "2026-11-26T20:00:12",
+      "status": "pass",
+      "message": "49 files, 652 MB, all verified",
+      "details": {
+        "datasets": [
+          "goes/swpc_events",
+          "harp_noaa",
+          "sharp/DEF",
+          "sharp/NRT"
+        ],
+        "files": 49,
+        "size_mb": 652,
+        "corrupted": [],
+        "missing": [],
+        "files_not_in_manifest": []
+      },
+      "duration_min": 0.01,
+      "log": null
+    },
+    {
+      "id": "P2.sharp",
+      "phase": "P2 data store",
+      "title": "SHARP DEF/NRT: rows, keys, order, missing values, freshness",
+      "estimated_min": 8,
+      "started_at": "2026-11-26T20:00:13",
+      "status": "warn",
+      "message": "NRT: last record 14 days ago (store not updated?)",
+      "details": {
+        "DEF": {
+          "rows": 5628153,
+          "rows_manifest": 5628153,
+          "harps": 8301,
+          "harp_max": 15222,
+          "t_first": "2010-04-30 23:59:30+00:00",
+          "t_last": "2026-10-06 23:59:23+00:00",
+          "days_since_last_record": 50,
+          "duplicated_keys": 0,
+          "sorted_within_harp": true,
+          "null_fraction": {
+            "USFLUX": 0.0,
+            "LAT_MIN": 0.0477,
+            "NOAA_AR": 0.0
+          },
+          "empty_patch_records": 268247
+        },
+        "NRT": {
+          "rows": 4746570,
+          "rows_manifest": 4746570,
+          "harps": 10749,
+          "harp_max": 14198,
+          "t_first": "2012-09-14 02:11:28+00:00",
+          "t_last": "2026-11-11 22:11:18+00:00",
+          "days_since_last_record": 14,
+          "duplicated_keys": 0,
+          "sorted_within_harp": true,
+          "null_fraction": {
+            "USFLUX": 0.0,
+            "LAT_MIN": 0.0,
+            "NOAA_AR": 0.0
+          },
+          "empty_patch_records": 0
+        }
+      },
+      "duration_min": 0.05,
+      "log": null
+    },
+    {
+      "id": "P2.goes",
+      "phase": "P2 data store",
+      "title": "GOES events and HARP-NOAA map: coverage and consistency",
+      "estimated_min": 2,
+      "started_at": "2026-11-26T20:00:16",
+      "status": "warn",
+      "message": "Last GOES event 15 days ago",
+      "details": {
+        "events": 33536,
+        "columns": [
+          "event_id",
+          "event",
+          "tstart",
+          "tmax",
+          "tend",
+          "satellite",
+          "quality",
+          "goes_class",
+          "flux_reported",
+          "integrated_flux",
+          "region_reported",
+          "NOAA_AR",
+          "location",
+          "lat",
+          "lon"
+        ],
+        "years": {
+          "2010": 1260,
+          "2011": 2171,
+          "2012": 2190,
+          "2013": 2043,
+          "2014": 2255,
+          "2015": 2026,
+          "2016": 1258,
+          "2017": 1090,
+          "2018": 335,
+          "2019": 249,
+          "2020": 552,
+          "2021": 2054,
+          "2022": 3127,
+          "2023": 3206,
+          "2024": 3756,
+          "2025": 3287,
+          "2026": 2677
+        },
+        "missing_peak": 22,
+        "duplicated_event_id": 0,
+        "satellites": {
+          "G15": 13234,
+          "G16": 12525,
+          "G18": 5132,
+          "G14": 1322,
+          "G19": 710,
+          "G13": 315,
+          "G17": 292,
+          "SDO": 5,
+          "////": 1
+        },
+        "class_counts": {
+          "C": 20647,
+          "B": 9873,
+          "M": 2760,
+          "X": 155,
+          "A": 101
+        },
+        "harp_noaa_pairs": 3609,
+        "last_event": "2026-11-10 20:23:00+00:00"
+      },
+      "duration_min": 0.0,
+      "log": null
+    },
+    {
+      "id": "P9.validation",
+      "phase": "P9 robustness",
+      "title": "Wrong parameters are refused with a message",
+      "estimated_min": 1,
+      "started_at": "2026-11-26T20:00:16",
+      "status": "pass",
+      "message": "25 checks",
+      "details": {
+        "checks": {
+          "labels: valid config accepted": true,
+          "labels: unknown threshold refused": true,
+          "labels: zero window refused": true,
+          "labels: start after end refused": true,
+          "labels: unknown series refused": true,
+          "labels: bad calibration refused": true,
+          "labels: max_abs_lon > 90 refused": true,
+          "dataset: valid config accepted": true,
+          "dataset: sampling 7 min refused": true,
+          "dataset: window 0 h refused": true,
+          "dataset: unknown features refused": true,
+          "dataset: subsample > rows refused": true,
+          "split: valid config accepted": true,
+          "split: unknown feature refused": true,
+          "split: TIMESTEPS > dataset refused": true,
+          "split: N_FOLDS 1 refused": true,
+          "split: cutoff with random split refused": true,
+          "split: multi-class refused": true,
+          "training: valid config accepted": true,
+          "training: no window refused": true,
+          "training: window longer than split refused": true,
+          "training: more folds than split refused": true,
+          "training: unknown device refused": true,
+          "training: split with test/train shared HARPs refused": true,
+          "empty store reported by the settings": true
+        }
+      },
+      "duration_min": 0.13,
+      "log": null
+    },
+    {
+      "id": "P4.labeling",
+      "phase": "P4 labeling",
+      "title": "Labels DEF/NRT \u00d7 C/M/X: invariants, monotonicity, timing",
+      "estimated_min": 25,
+      "started_at": "2026-11-26T20:00:23",
+      "status": "pass",
+      "message": "DEF_C 6,689 YES/48,393 (5s), DEF_M 1,541 YES/48,393 (4s), DEF_X 145 YES/48,393 (5s), NRT_C 5,716 YES/43,275 (6s), NRT_M 1,323 YES/43,275 (5s), NRT_X 121 YES/43,275 (5s)",
+      "details": {
+        "DEF_C": {
+          "rows": 48393,
+          "harps": 7591,
+          "yes": 6689,
+          "strat_class": {
+            "NO1": 31122,
+            "C": 5148,
+            "NO4": 4580,
+            "NO2": 3366,
+            "NO3": 2636,
+            "M": 1396,
+            "X": 145
+          },
+          "seconds": 4.7,
+          "association": {
+            "events": 33525,
+            "with_noaa_region": 28401,
+            "associated": 27287,
+            "not_associated": 1114,
+            "ambiguous": 438,
+            "rules": {
+              "unique": 25926,
+              "nearest_span": 923,
+              "flux": 264,
+              "position": 140,
+              "position+flux": 34
+            }
+          },
+          "invariant_violations": []
+        },
+        "DEF_M": {
+          "rows": 48393,
+          "harps": 7591,
+          "yes": 1541,
+          "strat_class": {
+            "NO1": 41503,
+            "NO4": 2569,
+            "NO2": 1890,
+            "M": 1396,
+            "NO3": 890,
+            "X": 145
+          },
+          "seconds": 4.4,
+          "association": {
+            "events": 33525,
+            "with_noaa_region": 28401,
+            "associated": 27287,
+            "not_associated": 1114,
+            "ambiguous": 438,
+            "rules": {
+              "unique": 25926,
+              "nearest_span": 923,
+              "flux": 264,
+              "position": 140,
+              "position+flux": 34
+            }
+          },
+          "invariant_violations": []
+        },
+        "DEF_X": {
+          "rows": 48393,
+          "harps": 7591,
+          "yes": 145,
+          "strat_class": {
+            "NO1": 47055,
+            "NO4": 579,
+            "NO2": 534,
+            "X": 145,
+            "NO3": 80
+          },
+          "seconds": 4.7,
+          "association": {
+            "events": 33525,
+            "with_noaa_region": 28401,
+            "associated": 27287,
+            "not_associated": 1114,
+            "ambiguous": 438,
+            "rules": {
+              "unique": 25926,
+              "nearest_span": 923,
+              "flux": 264,
+              "position": 140,
+              "position+flux": 34
+            }
+          },
+          "invariant_violations": []
+        },
+        "NRT_C": {
+          "rows": 43275,
+          "harps": 8425,
+          "yes": 5716,
+          "strat_class": {
+            "NO1": 28797,
+            "C": 4393,
+            "NO4": 3797,
+            "NO2": 2743,
+            "NO3": 2222,
+            "M": 1202,
+            "X": 121
+          },
+          "seconds": 5.5,
+          "association": {
+            "events": 33525,
+            "with_noaa_region": 28401,
+            "associated": 23693,
+            "not_associated": 4708,
+            "ambiguous": 875,
+            "rules": {
+              "unique": 21844,
+              "nearest_span": 974,
+              "flux": 554,
+              "position": 292,
+              "position+flux": 29
+            }
+          },
+          "invariant_violations": []
+        },
+        "NRT_M": {
+          "rows": 43275,
+          "harps": 8425,
+          "yes": 1323,
+          "strat_class": {
+            "NO1": 37339,
+            "NO4": 2190,
+            "NO2": 1641,
+            "M": 1202,
+            "NO3": 782,
+            "X": 121
+          },
+          "seconds": 5.4,
+          "association": {
+            "events": 33525,
+            "with_noaa_region": 28401,
+            "associated": 23693,
+            "not_associated": 4708,
+            "ambiguous": 875,
+            "rules": {
+              "unique": 21844,
+              "nearest_span": 974,
+              "flux": 554,
+              "position": 292,
+              "position+flux": 29
+            }
+          },
+          "invariant_violations": []
+        },
+        "NRT_X": {
+          "rows": 43275,
+          "harps": 8425,
+          "yes": 121,
+          "strat_class": {
+            "NO1": 42142,
+            "NO4": 509,
+            "NO2": 444,
+            "X": 121,
+            "NO3": 59
+          },
+          "seconds": 5.2,
+          "association": {
+            "events": 33525,
+            "with_noaa_region": 28401,
+            "associated": 23693,
+            "not_associated": 4708,
+            "ambiguous": 875,
+            "rules": {
+              "unique": 21844,
+              "nearest_span": 974,
+              "flux": 554,
+              "position": 292,
+              "position+flux": 29
+            }
+          },
+          "invariant_violations": []
+        }
+      },
+      "duration_min": 0.5,
+      "log": "logs/P4.labeling.log"
+    },
+    {
+      "id": "P4.determinism",
+      "phase": "P4 labeling",
+      "title": "Labeling twice with the same parameters gives identical labels",
+      "estimated_min": 6,
+      "started_at": "2026-11-26T20:00:54",
+      "status": "pass",
+      "message": "identical (43,275 rows); S_s = C, L = 48 h invariants hold",
+      "details": {
+        "rows": 43275,
+        "strat_class": {
+          "NO1": 32557,
+          "C": 4393,
+          "NO4": 2055,
+          "NO2": 1792,
+          "M": 1202,
+          "NO3": 1155,
+          "X": 121
+        },
+        "invariant_violations": []
+      },
+      "duration_min": 0.18,
+      "log": null
+    },
+    {
+      "id": "P4.legacy",
+      "phase": "P4 labeling",
+      "title": "Comparison with the static tables of the former database",
+      "estimated_min": 10,
+      "started_at": "2026-11-26T20:01:05",
+      "status": "skip",
+      "message": "/data/cornerstone.sqlite not present on this machine (the former database is optional)",
+      "duration_min": 0.0,
+      "log": null
+    },
+    {
+      "id": "P5.def_xgb",
+      "phase": "P5 pipeline (real data)",
+      "title": "DEF M+ 24 h: labels \u2192 dataset \u2192 split \u2192 XGBoost \u2192 inference",
+      "estimated_min": 40,
+      "started_at": "2026-11-26T20:01:05",
+      "status": "pass",
+      "message": "test TSS {'3h': 0.5942, '6h': 0.5964, '12h': 0.5811, '24h': 0.5793}; 21,325 samples",
+      "details": {
+        "artifacts": {
+          "lab": "lbl-20261126-200105-fece",
+          "ds": "ds-20261126-200111-5420",
+          "sp": "spl-20261126-200126-5c74",
+          "training": "trn-20261126-200159-27c4",
+          "inference": "inf-20261126-200344-afe5"
+        },
+        "times_min": {
+          "labels_min": 0.1,
+          "dataset_min": 0.3,
+          "split_min": 0.6,
+          "train_infer_min": 1.9
+        },
+        "labels": {
+          "n_rows": 48393,
+          "n_active_regions": 7591,
+          "label_counts": {
+            "NO": 46852,
+            "YES": 1541
+          }
+        },
+        "dataset": {
+          "n_samples": 21325,
+          "n_features": 17,
+          "n_positive": 1494,
+          "nan_ratio_overall": 0.20573429752066116,
+          "n_active_regions": 2621
+        },
+        "split": {
+          "n_samples_kept": 18582,
+          "n_samples_excluded": 2743
+        },
+        "leakage": {
+          "test_vs_trainval_shared_harps": 0,
+          "test_vs_trainval_shared_samples": 0,
+          "train_vs_val_shared_harps_per_fold": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "4": 0
+          },
+          "n_folds": 5
+        },
+        "cv_mean_val_TSS": {
+          "12h": 0.6663,
+          "24h": 0.6691,
+          "3h": 0.6682,
+          "6h": 0.6678
+        },
+        "cv_mean_test_TSS": {
+          "12h": 0.5872,
+          "24h": 0.5857,
+          "3h": 0.5769,
+          "6h": 0.5869
+        },
+        "inference_test_TSS": {
+          "3h": 0.5942,
+          "6h": 0.5964,
+          "12h": 0.5811,
+          "24h": 0.5793
+        }
+      },
+      "duration_min": 2.81,
+      "log": "logs/P5.def_xgb.log"
+    },
+    {
+      "id": "P5.nrt_xgb",
+      "phase": "P5 pipeline (real data)",
+      "title": "NRT M+ 24 h: same chain on the NRT series",
+      "estimated_min": 30,
+      "started_at": "2026-11-26T20:03:53",
+      "status": "pass",
+      "message": "test TSS {'24h': 0.6721}; 17,457 samples",
+      "details": {
+        "artifacts": {
+          "split": "spl-20261126-200414-6713",
+          "training": "trn-20261126-200447-75fa",
+          "inference": "inf-20261126-200544-ad2f"
+        },
+        "times_min": {
+          "labels_min": 0.2,
+          "dataset_min": 0.2,
+          "split_min": 0.6
+        },
+        "dataset": {
+          "n_samples": 17457,
+          "n_positive": 1144,
+          "nan_ratio_overall": 0.30704488999416274
+        },
+        "leakage": {
+          "test_vs_trainval_shared_harps": 0,
+          "test_vs_trainval_shared_samples": 0,
+          "train_vs_val_shared_harps_per_fold": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "4": 0
+          },
+          "n_folds": 5
+        },
+        "inference_test_TSS": {
+          "24h": 0.6721
+        }
+      },
+      "duration_min": 1.95,
+      "log": "logs/P5.nrt_xgb.log"
+    },
+    {
+      "id": "P5.def_all22",
+      "phase": "P5 pipeline (real data)",
+      "title": "DEF with all 22 SHARP keywords (features 'all') + XGBoost",
+      "estimated_min": 30,
+      "started_at": "2026-11-26T20:05:50",
+      "status": "pass",
+      "message": "22 features, test TSS {'24h': 0.7962}",
+      "details": {
+        "n_features": 22,
+        "inference_test_TSS": {
+          "24h": 0.7962
+        },
+        "clean_features_test_TSS": {
+          "3h": 0.5942,
+          "6h": 0.5964,
+          "12h": 0.5811,
+          "24h": 0.5793
+        }
+      },
+      "duration_min": 4.31,
+      "log": "logs/P5.def_all22.log"
+    },
+    {
+      "id": "P7.reproduce",
+      "phase": "P7 reproducibility",
+      "title": "Re-running dataset and XGBoost training gives identical results",
+      "estimated_min": 25,
+      "started_at": "2026-11-26T20:10:09",
+      "status": "pass",
+      "message": "dataset and XGBoost metrics identical",
+      "details": {
+        "dataset_arrays_equal": {
+          "HARPNUM": true,
+          "QUALITY": true,
+          "X": true,
+          "Y": true,
+          "label_Mplus_delta24": true,
+          "label_u_Mplus_delta24": true,
+          "timestamps": true
+        },
+        "training_max_metric_difference": 0.0
+      },
+      "duration_min": 2.02,
+      "log": null
+    },
+    {
+      "id": "P8.bundle",
+      "phase": "P8 sharing",
+      "title": "Export the DEF chain as a bundle and import it into an empty workspace",
+      "estimated_min": 10,
+      "started_at": "2026-11-26T20:12:10",
+      "status": "pass",
+      "message": "6 artifacts, 962.7 MB, re-import skipped 6",
+      "details": {
+        "artifacts": 6,
+        "size_mb": 962.7,
+        "imported": 6,
+        "second_import_skipped": 6,
+        "not_intact": {},
+        "demo_import": "refused",
+        "seconds": 4.1
+      },
+      "duration_min": 0.07,
+      "log": null
+    },
+    {
+      "id": "P10.gui_pages",
+      "phase": "P10 GUI",
+      "title": "Every GUI page renders without exceptions (Streamlit AppTest)",
+      "estimated_min": 3,
+      "started_at": "2026-11-26T20:12:15",
+      "status": "pass",
+      "message": "11 pages, no exceptions; error boxes shown by ['compare'] (see details)",
+      "details": {
+        "pages": {
+          "active_regions": {
+            "exceptions": [],
+            "errors": []
+          },
+          "compare": {
+            "exceptions": [],
+            "errors": [
+              "Window **24h**: comparison NOT valid \u2014 the evaluated samples differ; different inference sources; different splits (training on different data: allowed to compare dataset versions, but it must be stat"
+            ]
+          },
+          "data": {
+            "exceptions": [],
+            "errors": []
+          },
+          "dataset": {
+            "exceptions": [],
+            "errors": []
+          },
+          "experiments": {
+            "exceptions": [],
+            "errors": []
+          },
+          "home": {
+            "exceptions": [],
+            "errors": []
+          },
+          "inference": {
+            "exceptions": [],
+            "errors": []
+          },
+          "labeling": {
+            "exceptions": [],
+            "errors": []
+          },
+          "metrics": {
+            "exceptions": [],
+            "errors": []
+          },
+          "models": {
+            "exceptions": [],
+            "errors": []
+          },
+          "training": {
+            "exceptions": [],
+            "errors": []
+          }
+        }
+      },
+      "duration_min": 0.1,
+      "log": "logs/P10.gui_pages.log"
+    },
+    {
+      "id": "P1.package_tests",
+      "phase": "P1 test suites",
+      "title": "Package unit tests (cornerstone_db_package/tests)",
+      "estimated_min": 5,
+      "started_at": "2026-11-26T20:12:20",
+      "status": "pass",
+      "message": "27 tests, 0 failed, 0 skipped",
+      "details": {
+        "tests": 27,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_names": [],
+        "time_s": 17.1
+      },
+      "duration_min": 0.3,
+      "log": "logs/P1.package_tests.log"
+    },
+    {
+      "id": "P1.gui_unit",
+      "phase": "P1 test suites",
+      "title": "GUI unit tests",
+      "estimated_min": 3,
+      "started_at": "2026-11-26T20:12:39",
+      "status": "pass",
+      "message": "236 tests, 0 failed, 0 skipped",
+      "details": {
+        "tests": 236,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_names": [],
+        "time_s": 4.4
+      },
+      "duration_min": 0.09,
+      "log": "logs/P1.gui_unit.log"
+    },
+    {
+      "id": "P1.gui_integration",
+      "phase": "P1 test suites",
+      "title": "GUI integration tests (whole chain on synthetic data)",
+      "estimated_min": 15,
+      "started_at": "2026-11-26T20:12:44",
+      "status": "pass",
+      "message": "7 tests, 0 failed, 0 skipped",
+      "details": {
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_names": [],
+        "time_s": 121.7
+      },
+      "duration_min": 2.05,
+      "log": "logs/P1.gui_integration.log"
+    },
+    {
+      "id": "P6.lstm",
+      "phase": "P6 models (short training)",
+      "title": "LSTM: short training + inference on the DEF split",
+      "estimated_min": 45,
+      "started_at": "2026-11-26T20:14:47",
+      "status": "pass",
+      "message": "completed in 18.1 min (5 epochs, 2 folds), test TSS {'24h': 0.5002}",
+      "details": {
+        "epochs": 5,
+        "folds": 2,
+        "device": "cpu",
+        "training_min": 17.8,
+        "total_min": 18.1,
+        "cv_mean_val_TSS": {
+          "24h": 0.6062
+        },
+        "inference_test_TSS": {
+          "24h": 0.5002
+        }
+      },
+      "duration_min": 18.09,
+      "log": null
+    },
+    {
+      "id": "P6.inceptiontime",
+      "phase": "P6 models (short training)",
+      "title": "INCEPTIONTIME: short training + inference on the DEF split",
+      "estimated_min": 45,
+      "started_at": "2026-11-26T20:32:53",
+      "status": "pass",
+      "message": "completed in 2.7 min (5 epochs, 2 folds), test TSS {'24h': 0.5063}",
+      "details": {
+        "epochs": 5,
+        "folds": 2,
+        "device": "cpu",
+        "training_min": 2.5,
+        "total_min": 2.7,
+        "cv_mean_val_TSS": {
+          "24h": 0.6144
+        },
+        "inference_test_TSS": {
+          "24h": 0.5063
+        }
+      },
+      "duration_min": 2.71,
+      "log": null
+    },
+    {
+      "id": "P6.transformer",
+      "phase": "P6 models (short training)",
+      "title": "TRANSFORMER: short training + inference on the DEF split",
+      "estimated_min": 45,
+      "started_at": "2026-11-26T20:35:35",
+      "status": "pass",
+      "message": "completed in 7.8 min (5 epochs, 2 folds), test TSS {'24h': 0.5213}",
+      "details": {
+        "epochs": 5,
+        "folds": 2,
+        "device": "cpu",
+        "training_min": 7.5,
+        "total_min": 7.8,
+        "cv_mean_val_TSS": {
+          "24h": 0.6363
+        },
+        "inference_test_TSS": {
+          "24h": 0.5213
+        }
+      },
+      "duration_min": 7.82,
+      "log": null
+    },
+    {
+      "id": "P6.minirocket",
+      "phase": "P6 models (short training)",
+      "title": "MINIROCKET: short training + inference on the DEF split",
+      "estimated_min": 45,
+      "started_at": "2026-11-26T20:43:24",
+      "status": "pass",
+      "message": "completed in 2.8 min (5 epochs, 2 folds), test TSS {'24h': 0.2718}",
+      "details": {
+        "epochs": 5,
+        "folds": 2,
+        "device": "cpu",
+        "training_min": 2.6,
+        "total_min": 2.8,
+        "cv_mean_val_TSS": {
+          "24h": 0.3797
+        },
+        "inference_test_TSS": {
+          "24h": 0.2718
+        }
+      },
+      "duration_min": 2.81,
+      "log": null
+    },
+    {
+      "id": "P3.update",
+      "phase": "P3 data update",
+      "title": "Incremental update from JSOC/NOAA on a copy of the store",
+      "estimated_min": 60,
+      "started_at": "2026-11-26T20:46:12",
+      "status": "fail",
+      "message": "update exited with code 1 after 10.4 min (see the log)",
+      "details": {
+        "sources": "harp_noaa,goes,sharp_DEF,sharp_NRT",
+        "minutes": 10.4,
+        "exit_code": 1,
+        "rows_before": {
+          "goes/swpc_events": 33536,
+          "harp_noaa": 3609,
+          "sharp/DEF": 5628153,
+          "sharp/NRT": 4746570
+        },
+        "rows_after": {
+          "goes/swpc_events": 33536,
+          "harp_noaa": 3622,
+          "sharp/DEF": 5648144,
+          "sharp/NRT": 4761786
+        },
+        "log_tail": "$ /opt/venv/bin/python -c import sys; from cornerstone.data import DataStore; from cornerstone.data.update import update_all;update_all(DataStore(sys.argv[1]), sources=['harp_noaa', 'goes', 'sharp_DEF', 'sharp_NRT']) /nightly/store_copy\nHARP-NOAA map: 2,648 HARPs, 3,406 NOAA regions, 3,622 pairs\n!! goes failed: TimeoutError: [Errno 110] Connection timed out\nhmi.sharp_720s: last HARP 15266; 1 blocks to update, 3 of 3 requests to send (0 cached)\n   DEF HARP 15200-15299: 23,323 records (1/3, 65s)\n   DEF HARP 15100-15199: 41,878 records (2/3, 111s)\n   DEF HARP 15000-15099: 48,599 records (3/3, 119s)\nhmi.sharp_720s: 1 blocks written in 119s; store 5,648,144 records\nhmi.sharp_720s_nrt: last HARP 14229; 2 blocks to update, 13 of 13 requests to send (0 cached)\n   NRT HARP 13100-13199: 28,630 records (1/13, 61s)\n   NRT HARP 13000-13099: 35,278 records (2/13, 78s)\n   NRT HARP 13200-13299: 41,751 records (3/13, 112s)\n   NRT HARP 13300-13399: 39,519 records (4/13, 160s)\n   NRT HARP 13400-13499: 40,097 records (5/13, 165s)\n   NRT HARP 13500-13599: 43,406 records (6/13, 206s)\n   NRT HARP 13700-13799: 32,054 records (7/13, 238s)\n   NRT HARP 13600-13699: 41,760 records (8/13, 247s)\n   NRT HARP 13800-13899: 38,195 records (9/13, 298s)\n   NRT HARP 14000-14099: 30,504 records (10/13, 314s)\n   NRT HARP 13900-13999: 37,703 records (11/13, 321s)\n   NRT HARP 14200-14299: 7,190 records (12/13, 328s)\n   NRT HARP 14100-14199: 31,918 records (13/13, 366s)\nhmi.sharp_720s_nrt: 2 blocks written in 366s; store 4,761,786 records\nUpdate finished in 623s with errors in ['goes']\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/opt/cornerstone/cornerstone/data/update.py\", line 41, in update_all\n    raise RuntimeError(\"Update failed for: \" + \"; \".join(f\"{k}: {v}\" for k, v in errors.items()))\nRuntimeError: Update failed for: goes: TimeoutError: [Errno 110] Connection timed out\n"
+      },
+      "duration_min": 10.4,
+      "log": "logs/P3.update.log"
+    },
+    {
+      "id": "P6.other_models",
+      "phase": "P6 models (short training)",
+      "title": "Other models offered by the GUI: 1 epoch, 1 fold, 3 h window",
+      "estimated_min": 60,
+      "started_at": "2026-11-26T20:56:37",
+      "status": "pass",
+      "message": "working: ['ONEFITSALL', 'Autoformer', 'DLinear', 'FEDformer', 'LightTS', 'Nonstationary_Transformer', 'Pyraformer', 'Reformer', 'TimesNet', 'Informer', 'ROCKET']; failing: []",
+      "details": {
+        "ONEFITSALL": {
+          "status": "pass",
+          "minutes": 1.6,
+          "test_TSS": {
+            "3h": 0.2396
+          }
+        },
+        "Autoformer": {
+          "status": "pass",
+          "minutes": 0.6,
+          "test_TSS": {
+            "3h": 0.0048
+          }
+        },
+        "DLinear": {
+          "status": "pass",
+          "minutes": 0.5,
+          "test_TSS": {
+            "3h": 0.3677
+          }
+        },
+        "FEDformer": {
+          "status": "pass",
+          "minutes": 0.7,
+          "test_TSS": {
+            "3h": 0.3391
+          }
+        },
+        "LightTS": {
+          "status": "pass",
+          "minutes": 5.5,
+          "test_TSS": {
+            "3h": 0.1836
+          }
+        },
+        "Nonstationary_Transformer": {
+          "status": "pass",
+          "minutes": 0.6,
+          "test_TSS": {
+            "3h": 0.4431
+          }
+        },
+        "Pyraformer": {
+          "status": "pass",
+          "minutes": 0.6,
+          "test_TSS": {
+            "3h": 0.4619
+          }
+        },
+        "Reformer": {
+          "status": "pass",
+          "minutes": 0.6,
+          "test_TSS": {
+            "3h": 0.4689
+          }
+        },
+        "TimesNet": {
+          "status": "pass",
+          "minutes": 0.7,
+          "test_TSS": {
+            "3h": 0.4568
+          }
+        },
+        "Informer": {
+          "status": "pass",
+          "minutes": 0.6,
+          "test_TSS": {
+            "3h": 0.4758
+          }
+        },
+        "ROCKET": {
+          "status": "pass",
+          "minutes": 2.9,
+          "test_TSS": {
+            "3h": 0.0457
+          }
+        }
+      },
+      "duration_min": 14.74,
+      "log": "logs/P6.other_models.log"
+    },
+    {
+      "id": "P11.inceptiontime_full",
+      "phase": "P11 full training",
+      "title": "InceptionTime as the reference experiment (4 windows, 5 folds, 100 epochs)",
+      "estimated_min": 360,
+      "started_at": "2026-11-26T21:11:21",
+      "status": "warn",
+      "message": "test TSS differs from the reference by more than 0.05: {'12h': -0.067, '24h': -0.071, '3h': -0.079, '6h': -0.072}",
+      "details": {
+        "training_hours": 1.66,
+        "cv_mean_test_TSS": {
+          "12h": 0.5235,
+          "24h": 0.4979,
+          "3h": 0.531,
+          "6h": 0.5164
+        },
+        "reference": {
+          "3h": 0.61,
+          "6h": 0.588,
+          "12h": 0.59,
+          "24h": 0.569
+        },
+        "delta": {
+          "12h": -0.067,
+          "24h": -0.071,
+          "3h": -0.079,
+          "6h": -0.072
+        },
+        "inference_test_TSS": {
+          "3h": 0.5194,
+          "6h": 0.5201,
+          "12h": 0.5314,
+          "24h": 0.4933
+        }
+      },
+      "duration_min": 99.95,
+      "log": null
+    },
+    {
+      "id": "P12.store_unchanged",
+      "phase": "P12 final checks",
+      "title": "The tests did not modify the data store",
+      "estimated_min": 6,
+      "started_at": "2026-11-26T22:51:17",
+      "status": "pass",
+      "message": "49 files unchanged",
+      "details": {},
+      "duration_min": 0.01,
+      "log": null
+    }
+  ]
+}
